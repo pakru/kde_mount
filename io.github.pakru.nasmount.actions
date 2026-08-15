@@ -1,0 +1,87 @@
+[Domain]
+Name=nasmount
+Icon=drive-network
+
+# allow_active=yes - no authentication for a user in an active local session,
+# which is what Smb4K's mount helper does for the same operation.
+#
+# This is not the privilege grant it first appears to be. The helper only ever
+# operates as the calling user's own uid, on a definition it has proven that
+# user owns (docs/kcm-implementation-plan.md section 4.1), and only mounts onto a
+# path below that user's home (or /mnt, /media) that it has proven is not a
+# symlink and not already someone else's directory.
+#
+# It is also a hard requirement for arming saved shares at sign-in: any
+# prompting policy would pop an authentication dialog on every login.
+#
+# allow_inactive=no keeps this off non-active and remote sessions.
+[io.github.pakru.nasmount.define]
+Name=Define a network mount
+Description=Authentication is required to define a network mount
+Policy=yes
+PolicyInactive=no
+
+# System mode is boot-owned, persistent, and its credential is stored
+# root-owned on disk indefinitely (design §7) -- the equivalent by hand is
+# sudo-editing /etc, so every System mutation below requires authentication
+# like that would. Design §7.1 describes this as "auth_admin_keep" (briefly
+# caching admin auth so several System actions in a row do not each re-prompt),
+# but kauth-policy-gen's own Policy-value grammar
+# (invent.kde.org/frameworks/kauth src/policy-gen/policy-gen.cpp) only ever
+# accepts yes|no|auth_self|auth_admin -- it has never generated a "_keep"
+# .policy entry, even though polkit itself understands one. Plain
+# auth_admin is used here instead: strictly more conservative (it re-prompts
+# every time rather than caching), never less.
+[io.github.pakru.nasmount.definesystem]
+Name=Define a boot-time network mount
+Description=Authentication is required to define a boot-time network mount
+Policy=auth_admin
+PolicyInactive=no
+
+[io.github.pakru.nasmount.undefine]
+Name=Remove a network mount definition
+Description=Authentication is required to remove a network mount definition
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.undefinesystem]
+Name=Remove a boot-time network mount definition
+Description=Authentication is required to remove a boot-time network mount definition
+Policy=auth_admin
+PolicyInactive=no
+
+[io.github.pakru.nasmount.arm]
+Name=Arm a network mount
+Description=Authentication is required to arm a network mount
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.disarm]
+Name=Disarm a network mount
+Description=Authentication is required to disarm a network mount
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.mountnow]
+Name=Mount a network share now
+Description=Authentication is required to mount a network share now
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.unmountnow]
+Name=Unmount a network share now
+Description=Authentication is required to unmount a network share now
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.inventory]
+Name=List network mount health
+Description=Authentication is required to list network mount health
+Policy=yes
+PolicyInactive=no
+
+[io.github.pakru.nasmount.purge]
+Name=Purge all nasmount data
+Description=Administrator authentication is required to remove all nasmount shares and data
+Policy=auth_admin
+PolicyInactive=no

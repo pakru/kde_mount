@@ -1,0 +1,81 @@
+#!/bin/bash
+#
+# Builds and installs nasmount: the Dolphin service menu, the kcm_nasmount
+# System Settings module, and the session supervisor.
+#
+# Run WITHOUT sudo. The build happens as you; only `cmake --install` elevates.
+#
+# This is a clean install only (docs/credential-modes-design.md §2) — there is
+# no migration from an older nasmount. If a previous version is installed, run
+# uninstall.sh first.
+
+set -euo pipefail
+
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Do not run this as root — the build should not run as root." >&2
+    echo "It will prompt for authentication when it needs it." >&2
+    exit 1
+fi
+
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD="$SRC/build"
+
+# Prefix /usr, not /usr/local: D-Bus only scans /usr/share/dbus-1 for system
+# services, and polkit only scans /usr/share/polkit-1/actions. A /usr/local
+# install would build fine and then silently fail to authenticate.
+PREFIX=/usr
+
+for tool in cmake g++ systemd-escape systemctl; do
+    command -v "$tool" >/dev/null || { echo "ERROR: $tool not found" >&2; exit 1; }
+done
+[ -x /usr/sbin/mount.cifs ] || command -v mount.cifs >/dev/null || {
+    echo "ERROR: mount.cifs not found — install cifs-utils" >&2; exit 1; }
+
+echo "Configuring..."
+cmake -S "$SRC" -B "$BUILD" \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
+
+echo "Building..."
+cmake --build "$BUILD" -j"$(nproc)"
+
+echo "Running tests..."
+for t in unitspec_test unitvalue_test verify_test helperinvoke_test store_test \
+         mountactions_test mountmodel_test durablefs_test inventory_test operations_test \
+         arming_test credentialstore_test cleanupvalidation_test; do
+    "$BUILD/bin/$t" || {
+        echo "ERROR: $t failed — refusing to install." >&2
+        exit 1
+    }
+done
+bash "$SRC/tests/removed_api_gates.sh"
+
+echo "Installing (authentication required)..."
+sudo cmake --install "$BUILD"
+
+echo
+echo "Installed:"
+sed 's/^/  /' "$BUILD/install_manifest.txt"
+
+echo
+echo "Enabling the session supervisor (arms shares at sign-in, disarms at logout)..."
+systemctl --user daemon-reload
+systemctl --user enable --now nasmount-session.service
+
+echo
+echo "Enabling the boot coordinator (arms System-mode shares at boot)..."
+sudo systemctl daemon-reload
+sudo systemctl enable --now nasmount-boot.service
+
+echo
+echo "Refreshing Dolphin's service menu cache and System Settings' KCM cache..."
+kbuildsycoca6 --noincremental 2>/dev/null || true
+
+echo
+echo "Done. Fully quit Dolphin so it re-reads the service menu:"
+echo "    killall dolphin && dolphin"
+echo
+echo "Then type smb://<your-nas>/ in the location bar, right-click a share"
+echo "and choose 'Mount as Network Drive…' — or open System Settings →"
+echo "Network Mounts to add one directly."

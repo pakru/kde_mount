@@ -1,0 +1,133 @@
+/*
+ * operations — define/undefine/purge as direct, checked operations (design
+ * §9, simplification-implementation-plan.md §4/§5).
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * define()/remove() are both mode-generic: the caller (helper.cpp) hard-codes
+ * the mode involved from which entry point was invoked (`define` vs
+ * `definesystem`), never from a free-form caller argument (design §7.1).
+ * There is no in-place replace/edit: changing a share's UNC, mount point,
+ * credentials, authentication kind, or mode is done by removing the
+ * definition and creating it again.
+ *
+ * Neither writes a durable manifest: a same-process failure is compensated
+ * inline (checked, best-effort, tracked only in memory); a crash or kill
+ * leaves whatever was durably written, visible on the next inventory
+ * refresh as an owned Partial pair or a plain checked-failure retry. There
+ * is nothing to recover at startup or before a mutating action.
+ */
+
+#pragma once
+
+#include "arming.h"
+#include "unitspec.h"
+#include "unitvalue.h"
+
+#include <QString>
+
+#include <sys/types.h>
+
+namespace Root::Operations
+{
+
+// ---------------------------------------------------------------------------
+// define (design §9.1)
+// ---------------------------------------------------------------------------
+
+struct DefineInput {
+    uid_t ownerUid = 0;
+    gid_t ownerGid = 0;
+    QString unc;        ///< already validated by the caller
+    QString mountPoint; ///< canonical, already validated
+    QString unitName;   ///< re-derived by the caller via UnitValue::unitPathsFor()
+    QString username;   ///< empty => guest
+
+    /** Hard-coded by the caller from which entry point was invoked --
+     *  Session for `define`, System for `definesystem` (design §7.1). Never
+     *  derived from a caller-supplied argument. */
+    UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
+
+    /** System + authenticated only: written after both unit halves exist
+     *  (simplification-implementation-plan.md §4, corrected ordering).
+     *  Ignored otherwise -- a Session credential is never written at define
+     *  time (arm() writes it). */
+    QString domain;
+    QString password;
+
+    /** System only: the same MountpointPlan the caller already validated via
+     *  UnitSpec::validateMountpoint() (plan.path must equal `mountPoint`) --
+     *  needed for the immediate-arm path walk (design §6.3a). Unused for
+     *  Session, where arm() remains a separate later action. */
+    UnitSpec::MountpointPlan mountPlan;
+};
+
+struct DefineOutput {
+    bool ok = false;
+    QString shareId;
+    QString error;
+    /** System only: whether the share is now actually active (design
+     *  §6.3a). Always false for Session, where activation is a separate,
+     *  later arm() call. */
+    bool activated = false;
+};
+
+/**
+ * Fresh define, write-forward only (`Definition::None` only — an existing
+ * Partial pair is never repaired; the caller must remove it first,
+ * simplification-implementation-plan.md §4.1/§4.3). Writes the mount unit,
+ * then the automount unit; for System + authenticated, writes the credential
+ * only once both halves exist; for System + guest, asserts no credential
+ * artifact exists (design §3.2.2). Session never arms here -- `arm` remains
+ * a separate action, called by the client after a confirmed define. A
+ * System definition instead arms immediately, as its last step: on arm
+ * failure, the new definition and credential are removed with checked
+ * same-call compensation and the whole call reports failure, matching
+ * "creation succeeds only with an active trigger and matching id."
+ */
+DefineOutput define(const DefineInput &input);
+
+// ---------------------------------------------------------------------------
+// undefine (design §9.2)
+// ---------------------------------------------------------------------------
+
+struct RemovalInput {
+    uid_t ownerUid = 0;
+    gid_t ownerGid = 0;
+    QString shareId;
+    UnitValue::CredentialMode mode;
+    UnitValue::AuthenticationKind authentication;
+    QString mountPoint;
+    QString unitName;
+    QString what;   ///< the .mount unit's own What=, for the correlation gate
+};
+
+struct RemovalOutput {
+    bool ok = false;
+    QString error;
+};
+
+/** undefine as a direct, checked removal: safely stops the live runtime,
+ *  then removes the credential, both unit halves, and the automount-ID
+ *  record. Every step is idempotent, so a failure partway simply leaves the
+ *  remaining steps safe to retry. */
+RemovalOutput remove(const RemovalInput &input);
+
+// ---------------------------------------------------------------------------
+// authenticated uninstall purge (design §14 / plan phase 8)
+// ---------------------------------------------------------------------------
+
+struct PurgeOutput {
+    bool ok = false;
+    int removedShares = 0;
+    QString error;
+};
+
+/** Removes all root-owned state created by nasmount for `ownerUid`. This is
+ * deliberately all-or-nothing with respect to ownership: every managed
+ * definition must be well formed and owned by the caller, and every live
+ * instance must pass safeStop() before its artifacts are removed.
+ * Mount-point directories are never removed. */
+PurgeOutput purge(uid_t ownerUid);
+
+} // namespace Root::Operations

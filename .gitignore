@@ -1,0 +1,58 @@
+# --- build trees ------------------------------------------------------------
+# `build/` is the only one the tooling knows about (Makefile, install.sh,
+# uninstall.sh); the `build-*` pattern catches ad-hoc trees like build-review/
+# and build-debug/ that otherwise get committed by accident.
+/build/
+/build-*/
+
+# An in-source build (cmake -S . -B .) would scatter these at the root.
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/CTestTestfile.cmake
+/install_manifest.txt
+/Testing/
+
+# Qt/KDE generated sources — normally inside the build tree, listed in case one
+# lands beside the sources.
+*_autogen/
+moc_*.cpp
+*.moc
+qrc_*.cpp
+ui_*.h
+
+# Outputs of configure_file(): systemd/*.service.in, servicemenu/*.desktop.in.
+# The .in templates are the tracked sources; these are the substituted results.
+/systemd/*.service
+/servicemenu/*.desktop
+
+# --- tooling caches ---------------------------------------------------------
+.cache/
+compile_commands.json
+.clangd/
+.ccls-cache/
+
+# --- editors ----------------------------------------------------------------
+.vscode/
+.idea/
+.kdev4/
+*.kdev4
+CMakeLists.txt.user*
+*~
+*.swp
+*.swo
+
+# --- local Claude Code overrides (shared settings.json stays tracked) -------
+.claude/settings.local.json
+
+# --- crash and profiling artifacts ------------------------------------------
+core
+core.[0-9]*
+vgcore.*
+*.log
+
+# --- never commit credentials ----------------------------------------------
+# This project handles CIFS credential files; they belong in /run or /etc,
+# never in the tree. Cheap insurance against a stray test artifact.
+*.cred
+*.credentials

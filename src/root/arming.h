@@ -1,0 +1,182 @@
+/*
+ * arming — the shared arm/disarm/safe-stop routines every privileged caller
+ * that starts or stops a share's automount goes through (plan §2.5, design
+ * §6.4, §9.5; simplification-implementation-plan.md §4.2).
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * "The automount reports active" and "this is the instance we are allowed
+ * to act on" are different claims (plan §1.4.4). Every stop in this project
+ * goes through safeStop(), which proves the second claim via the recorded
+ * instance id before touching anything; every start goes through arm(),
+ * which never returns success without that id durably recorded, and rolls
+ * itself back rather than leave an active-but-unrecorded ("blessed")
+ * trigger if recording fails.
+ *
+ * There is no durable transaction manifest here: a same-process failure is
+ * compensated inline (stop what this call started, remove what this call
+ * wrote); a crash or kill leaves whatever was durably written, visible on
+ * the next inventory refresh. An active trigger with no matching recorded
+ * id is never adopted or stopped automatically regardless of how it got
+ * there — that gate does not depend on recovery.
+ */
+
+#pragma once
+
+#include "unitspec.h"
+#include "unitvalue.h"
+#include "verify.h"
+
+#include <QString>
+
+#include <sys/types.h>
+
+namespace Root::Arming
+{
+
+/**
+ * The structured result of an attempted stop (plan §2.5.2), replacing a
+ * bare bool: callers that must distinguish "nothing to do" from "could not
+ * prove it was safe" from "the process itself failed" make different
+ * decisions.
+ */
+enum class StopResult { Stopped, AlreadyInactive, Busy, CorrelationMismatch, Indeterminate };
+
+/** Pure runtime-correlation decision used by safeStop(), exposed for the
+ *  complete fail-closed table in arming_test. */
+enum class StopPrecheck { ShouldStop, AlreadyInactive, CorrelationMismatch, Indeterminate };
+StopPrecheck evaluateStopPrecheck(const Verify::RuntimeSnapshot &snapshot, QString *error);
+
+/**
+ * The correlation gate (design §4.2, §6.4) plus the actual stop, as one
+ * operation: computes the runtime snapshot for `unitName`/`mountPoint`, and
+ * — only if the mount is verified `Match`, or the automount is `Inactive`,
+ * or the automount is `Active` with `ActivationTrust::Trusted` — stops both
+ * halves. Never stops a unit whose active instance cannot be proven to be
+ * the one this tool recorded.
+ */
+StopResult safeStop(const QString &unitName, const QString &mountPoint, const QString &expectedWhat, QString *error);
+
+/** What arm() needs. Session mode only writes a credential (System's
+ *  persistent /etc credential is written separately, after the unit files
+ *  have been durably created but before systemd is reloaded). */
+struct ArmRequest {
+    uid_t ownerUid = 0;
+    gid_t ownerGid = 0;
+    QString shareId;
+    UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
+    UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
+    QString mountPoint; ///< canonical
+    QString unitName;
+    QString what; ///< the .mount unit's own What=, for the runtime precheck
+    QString username;
+    QString domain;
+    QString password;
+};
+
+/**
+ * Standalone Session arm (design §9.5, simplification plan §4.2's same-call
+ * sequence): writes the Session credential if required, starts the
+ * automount, then captures and durably records its unique instance id.
+ * Reports success only once the id is recorded. A same-process failure
+ * after start stops only the exact instance this call observed. Credential
+ * cleanup happens only after that stop is confirmed; otherwise the active
+ * untrusted state remains visible. A crash leaves whatever was durably
+ * written for the next refresh.
+ */
+bool arm(const ArmRequest &req, QString *error);
+
+struct DisarmRequest {
+    uid_t ownerUid = 0;
+    gid_t ownerGid = 0;
+    QString shareId;
+    UnitValue::CredentialMode mode;
+    UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
+    QString mountPoint;
+    QString unitName;
+    QString what; ///< the .mount unit's own What=, for the correlation gate
+};
+
+/** Standalone disarm (design §9.5): stops both halves via safeStop(), then
+ *  removes the runtime credential and recorded id. Each step is checked and
+ *  idempotent, so a failure partway simply leaves the remaining steps safe
+ *  to retry. */
+bool disarm(const DisarmRequest &req, QString *error);
+
+// ---------------------------------------------------------------------------
+// Shared single-share arming (plan §4.1, design §6.3/§6.3a/§6.4) — used by
+// definesystem's immediate arm and by nasmount-boot, so both
+// implement the exact same idempotency and path-safety rules. Never writes a
+// credential (System's was already durably written by definesystem before
+// this ever runs; a guest share never has one) — only validates it.
+// ---------------------------------------------------------------------------
+
+/** How the mount point may be touched while arming (design §10.1). An
+ *  interactive Add may create it exactly like
+ *  UnitSpec::openMountpointNoFollow(); nasmount-boot must never create or
+ *  chown anything and instead verifies whatever already exists via
+ *  UnitSpec::openMountpointNoCreate(). */
+enum class PathPolicy { InteractiveCreate, BootNoCreate };
+
+enum class ArmPrecheck { ReadyToArm, AlreadyArmed, Blocked };
+
+/**
+ * Pure decision table over an already-computed runtime snapshot (design
+ * §6.4's "inspect runtime before touching the path"): `Blocked` for
+ * Indeterminate automount/mount state, a live mount already occupying the
+ * path, or an active automount whose instance id does not match what was
+ * recorded (never "bless" it); `AlreadyArmed` only when the automount is
+ * Active *and* its ActivationTrust is Trusted; `ReadyToArm` otherwise
+ * (Inactive automount, nothing mounted). Exposed for testing without
+ * systemctl/mountinfo access; production code reaches this only through
+ * armShare(), which computes the snapshot via Verify::inspectRuntime() first.
+ */
+ArmPrecheck evaluateArmPrecheck(const Verify::RuntimeSnapshot &snapshot, QString *error);
+
+enum class ArmShareOutcome {
+    Armed,          ///< freshly started; its instance id is durably recorded
+    AlreadyArmed,   ///< idempotent no-op: the recorded id already matches an active instance
+    NeedsAttention, ///< failed closed for this one share; inspect definitionCleanupSafe before compensating
+};
+
+struct ArmShareRequest {
+    uid_t ownerUid = 0;
+    gid_t ownerGid = 0;
+    QString shareId;
+    UnitValue::CredentialMode mode = UnitValue::CredentialMode::System;
+    UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
+    UnitSpec::MountpointPlan plan; ///< plan.path is this share's canonical mount point
+    QString unitName;
+    QString what; ///< the .mount unit's own What=, for the correlation gate
+    PathPolicy pathPolicy = PathPolicy::BootNoCreate;
+};
+
+struct ArmShareResult {
+    ArmShareOutcome outcome = ArmShareOutcome::NeedsAttention;
+    QString error; ///< set only for NeedsAttention
+    /** Whether a caller that just created this definition may remove its unit
+     *  files and credential. False means a newly started trigger could not be
+     *  proven stopped, so the complete definition must remain visible for
+     *  refresh/administrator repair. */
+    bool definitionCleanupSafe = true;
+};
+
+/**
+ * Arms one share, standalone (design §9.5, simplification plan §4.2) — used
+ * by `definesystem`'s immediate arm and by nasmount-boot for each share it
+ * enumerates. Inspects runtime *before* touching the path (design §6.4): a
+ * recorded instance id that already matches an active automount is an
+ * idempotent no-op that touches nothing further; an active-but-unrecorded
+ * instance, or a live mount that does not correlate, fails closed without
+ * starting or recording anything. Only when the automount is inactive and
+ * nothing is mounted does it validate the credential (healthy for
+ * Credentials, absent for Guest — never write one), walk the path per
+ * `req.pathPolicy`, start the automount, and durably record its instance id.
+ * Any failure after the automount is actually started stops that exact
+ * trigger before returning, so a caller's own unit-file/credential cleanup
+ * (which this never performs) never has to reason about a still-active
+ * automount referencing units it is removing.
+ */
+ArmShareResult armShare(const ArmShareRequest &req);
+
+} // namespace Root::Arming

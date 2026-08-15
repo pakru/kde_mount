@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Service
+Name=Mount as Network Drive
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=inode/directory;
+X-KDE-Protocol=smb
+X-KDE-MinNumberOfUrls=1
+X-KDE-MaxNumberOfUrls=1
+Actions=mountAsDrive;
+
+[Desktop Action mountAsDrive]
+Name=Mount as Network Drive…
+Comment=Mount this SMB share, with the password kept in KWallet
+Icon=drive-network
+Exec=@KDE_INSTALL_FULL_BINDIR@/nasmount-dialog %u
