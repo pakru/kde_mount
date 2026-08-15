@@ -1,7 +1,7 @@
 /*
  * Tests for Root::Operations (plan §2.5-2.6, §3.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * define()/remove() write below /etc/nasmount and /etc/systemd/system, so —
  * exactly like durablefs_test.cpp before it — a

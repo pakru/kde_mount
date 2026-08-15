@@ -2,7 +2,7 @@
  * mountmodel — the merged view for the KCM (plan §7.1, simplification-
  * implementation-plan.md §4).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Merges, per refresh: Store records (including corrupt groups); both
  * managed unit halves, including either-half Partial, Tampered and orphan

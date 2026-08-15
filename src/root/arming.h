@@ -3,7 +3,7 @@
  * that starts or stops a share's automount goes through (plan §2.5, design
  * §6.4, §9.5; simplification-implementation-plan.md §4.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * "The automount reports active" and "this is the instance we are allowed
  * to act on" are different claims (plan §1.4.4). Every stop in this project

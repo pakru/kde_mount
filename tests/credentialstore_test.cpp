@@ -1,7 +1,7 @@
 /*
  * Tests for Root::CredentialStore (plan §2.1, §2.3.1-4).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every function here writes below /etc/nasmount or /run/nasmount, so --
  * like every other nasmount-root test file -- a real accept path needs root

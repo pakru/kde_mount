@@ -2,7 +2,7 @@
  * Tests for Verify: mountinfo parsing and the parts of the runtime state model
  * that do not require root (docs/credential-modes-design.md §4.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * inspectDefinition's Pair/Partial/NotOurs outcomes require a root-owned unit
  * file, which an unprivileged test cannot create — those are exercised by

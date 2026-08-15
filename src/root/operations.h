@@ -2,7 +2,7 @@
  * operations — define/undefine/purge as direct, checked operations (design
  * §9, simplification-implementation-plan.md §4/§5).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * define()/remove() are both mode-generic: the caller (helper.cpp) hard-codes
  * the mode involved from which entry point was invoked (`define` vs

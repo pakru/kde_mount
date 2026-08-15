@@ -2,7 +2,7 @@
  * rootlock — the single root-owned advisory lock shared by every privileged
  * nasmount executable (plan §2.1.3, design §6.4-6.5).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Covers authorisation, credential writes/deletes, unit-file changes,
  * start/stop and the completed reload for one privileged operation.

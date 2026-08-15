@@ -75,7 +75,7 @@ started by `nasmount-boot.service`), `nasmount-dialog` (service menu),
 ## Conventions
 
 - Every source file opens with a block comment: what the unit is, then
-  `SPDX-License-Identifier: GPL-2.0-or-later`, then the *reasoning* that a
+  `SPDX-License-Identifier: GPL-3.0-or-later`, then the *reasoning* that a
   reader would otherwise have to reconstruct. Headers carry the API contracts as
   `/** ... */` doc comments; `.cpp` files carry implementation reasoning. Match
   this density — it is unusually high and it is intentional.

@@ -3,7 +3,7 @@
  * `inventory` returns (plan §3.3, design §7.1's "read-only caller-owned
  * credential health"; simplification-implementation-plan.md §4.4).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The unprivileged frontend can already see the unit files themselves
  * (world-readable) and derive definition/runtime state through the core

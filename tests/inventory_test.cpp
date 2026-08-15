@@ -2,7 +2,7 @@
  * Tests for Root::Inventory (plan §3.3, simplification-implementation-plan.md
  * §4.4).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * buildFor() itself enumerates real /etc/systemd/system state and reads
  * /etc/nasmount credential files, so — like durablefs_test.cpp before it —

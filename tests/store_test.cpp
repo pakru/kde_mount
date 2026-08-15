@@ -1,7 +1,7 @@
 /*
  * Tests for Store's checked, compare-and-swap commit API (plan §1.6).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Deliberately never calls readPassword/writePassword/removePassword or
  * removeShare (which itself calls removePassword): those open a real KWallet

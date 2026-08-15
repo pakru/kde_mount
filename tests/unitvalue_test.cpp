@@ -1,7 +1,7 @@
 /*
  * Validation tests for UnitValue.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * These pin down the encoder's behaviour against what was verified empirically
  * on the real system (systemctl --user show on a loaded unit, not just

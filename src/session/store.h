@@ -1,7 +1,7 @@
 /*
  * store — per-user record of saved shares, and their passwords in KWallet.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * All of this is unprivileged and lives in the user's own session. The helper
  * never reads it: the dialog and KCM look the password up here and pass it

@@ -2,7 +2,7 @@
  * durablefs — descriptor-based, crash-durable filesystem primitives for the
  * privileged nasmount-root library (plan §2.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every real call site in this library operates on root-owned trees
  * (/etc/nasmount, /run/nasmount) that a hostile local user may have already

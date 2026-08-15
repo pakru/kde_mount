@@ -2,7 +2,7 @@
  * kcm_nasmount — System Settings module: list, add and remove
  * generated network-mount definitions.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * An "action module": every change (Add/Delete/Connect/Disarm/…) takes
  * effect immediately through Session::MountActions rather than being staged

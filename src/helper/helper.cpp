@@ -1,7 +1,7 @@
 /*
  * nasmount KAuth helper — the privileged half.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Runs as root, activated on the system bus by KAuth. Everything in the
  * argument map is untrusted: the dialog and KCM are unprivileged and a

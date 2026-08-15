@@ -5,7 +5,7 @@
  * UNC, mount point, credentials, authentication kind, or mode is Delete then
  * Add again (simplification-implementation-plan.md).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every public method here returns immediately and reports completion via
  * `finished()`. Nothing on the calling (GUI) thread blocks: the per-user lock

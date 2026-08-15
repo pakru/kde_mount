@@ -2,7 +2,7 @@
  * nasmount-boot — the root systemd oneshot that arms System-mode shares at
  * boot (design §6.3, plan §4.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Started directly by systemd as root (nasmount-boot.service); there is no
  * D-Bus/KAuth caller to authorize here, since this was always going to run

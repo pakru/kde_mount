@@ -2,7 +2,7 @@
  * runtimefiles — root-owned runtime records below /run/nasmount: the
  * automount instance id recorded at arm time (plan §2.1.4, §2.3.5-6).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Writes only; reading the recorded automount id back is unprivileged (any
  * process may read a file under /run/nasmount/automount-ids to compute

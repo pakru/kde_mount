@@ -2,7 +2,7 @@
  * Table-driven tests for Session::classifyRow() (simplification-
  * implementation-plan.md §4 actions 5/6/8, §6.3).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * classifyRow() is pure: no filesystem, systemd, or Store access, so every
  * DisplayState and every actionability combination is reachable by

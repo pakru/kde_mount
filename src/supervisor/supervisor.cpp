@@ -1,7 +1,7 @@
 /*
  * nasmount-supervisor — the session supervisor (plan §7.1).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * A systemd --user service, PartOf=graphical-session.target,
  * RemainAfterExit=yes, always active for the graphical session. `--start` is

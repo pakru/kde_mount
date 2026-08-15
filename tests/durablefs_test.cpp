@@ -1,7 +1,7 @@
 /*
  * Tests for Root::DurableFs (plan §2.2).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every real call site in durablefs.cpp hardcodes uid 0 (root) as the
  * expected owner, so an unprivileged test can never observe the full

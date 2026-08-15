@@ -1,7 +1,7 @@
 /*
  * Validation tests for UnitSpec.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * These exercise the same functions the privileged helper calls, so the
  * security-relevant behaviour is covered directly rather than by proxy. The

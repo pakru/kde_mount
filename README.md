@@ -86,16 +86,6 @@ It reads `build/install_manifest.txt` and refuses to run without it, so
 **uninstall works only from the build tree that installed** — after `make clean`,
 or in a fresh checkout, re-run `./install.sh` first.
 
-## Known limitations
-
-- **No in-place edit** — to change a share's server, path, credentials or mode,
-  remove it and add it again.
-- **IPv6 hosts are rejected** — `mount.cifs` needs those in a separate `ip=`.
-- **No drop-ins** — a unit with a `.mount.d`/`.automount.d` override is refused.
-- **NFS, SSHFS and WebDAV** are not supported.
-- **Foreign mounts are read-only** in the KCM — this tool never manages a unit it
-  did not create.
-
 ## Further reading
 
 - [`docs/credential-modes-design.md`](docs/credential-modes-design.md) — state

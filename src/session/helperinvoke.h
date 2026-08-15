@@ -3,7 +3,7 @@
  * issued from, shared by mountactions (async, worker-thread) and the session
  * supervisor (a plain oneshot binary, where a blocking call is fine).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * A boolean result cannot represent what KAuth actually tells the caller
  * (plan §1.5). Authorization denial and an explicit error from our own

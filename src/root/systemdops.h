@@ -2,7 +2,7 @@
  * systemdops — privileged systemd command execution for nasmount-root
  * (plan §2.1.5).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every call is bounded (output capped, a timeout that kills a runaway
  * process rather than leaking it) and exit-status checked — the unchecked

@@ -1,7 +1,7 @@
 /*
  * Tests for MountActions' pure decision functions (plan §1.7).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * addShare() itself is not unit-tested here: it dispatches real KAuth calls
  * and real KWallet I/O on a worker thread, neither of which is mockable

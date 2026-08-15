@@ -2,7 +2,7 @@
  * userlock — the per-user lock shared by the dialog, the KCM and the
  * supervisor (plan §6).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The root lock in the helper only covers one privileged call at a time; it
  * says nothing about the unprivileged config/wallet writes a client makes

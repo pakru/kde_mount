@@ -1,7 +1,7 @@
 /*
  * Tests for helperinvoke's outcome classification (plan §1.5).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * KAuth::ExecuteJob itself is not mockable — it is a concrete class with no
  * injectable transport. classifyOutcome() is the actual decision surface

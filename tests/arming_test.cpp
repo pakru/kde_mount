@@ -1,7 +1,7 @@
 /*
  * Tests for Root::Arming (plan §2.5, §4.1).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * armShare()/arm()/disarm() all write below
  * /etc/nasmount and /etc/systemd/system and call real systemctl, so — like

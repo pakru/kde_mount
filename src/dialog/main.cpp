@@ -1,7 +1,7 @@
 /*
  * nasmount-dialog — entry point.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Dolphin invokes this with the smb:// URL of the right-clicked folder, via the
  * service menu in servicemenu/nasmount.desktop.in. Arming saved shares at

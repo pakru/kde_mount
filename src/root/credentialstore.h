@@ -2,7 +2,7 @@
  * credentialstore — the root-owned mount.cifs credentials file, for both
  * modes, through one safe writer (plan §2.1, §2.3.1-4, design §8.1).
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Session credential files live below /run/nasmount; System files (phase 3+)
  * below /etc/nasmount. UnitSpec::credentialDirectory()/credentialPathFor()
