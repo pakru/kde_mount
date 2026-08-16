@@ -20,6 +20,7 @@
  */
 
 #include "dialogbackend.h"
+#include "nasmountversion.h"
 #include "smburl.h"
 
 #include <KLocalizedString>
@@ -51,6 +52,7 @@ int main(int argc, char **argv)
     QApplication app(argc, argv);
     KLocalizedString::setApplicationDomain(QByteArrayLiteral("nasmount"));
     QGuiApplication::setApplicationName(QStringLiteral("nasmount"));
+    QGuiApplication::setApplicationVersion(QString::fromLatin1(Nasmount::Version));
     QGuiApplication::setApplicationDisplayName(i18n("Mount as Network Drive"));
     QGuiApplication::setDesktopFileName(QStringLiteral("nasmount"));
 
@@ -58,6 +60,7 @@ int main(int argc, char **argv)
     parser.setApplicationDescription(
         i18n("Mounts an SMB share on demand, available again after a reboot."));
     parser.addHelpOption();
+    parser.addVersionOption();
     parser.addPositionalArgument(QStringLiteral("url"), i18n("smb:// URL of the share to mount"));
     parser.process(app);
 

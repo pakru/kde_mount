@@ -51,6 +51,8 @@ for t in unitspec_test unitvalue_test verify_test helperinvoke_test store_test \
 done
 bash "$SRC/tests/removed_api_gates.sh"
 bash "$SRC/tests/qml_invokable_gate.sh"
+ctest --test-dir "$BUILD" -R '^(appstreamtest|version_metadata)$' \
+      --output-on-failure --no-tests=error
 
 echo "Installing (authentication required)..."
 sudo cmake --install "$BUILD"

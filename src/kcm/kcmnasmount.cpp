@@ -6,7 +6,7 @@
 
 #include <KPluginFactory>
 
-K_PLUGIN_CLASS_WITH_JSON(KcmNasmount, "kcm_nasmount.json")
+K_PLUGIN_CLASS_WITH_JSON(KcmNasmount, "kcm_nasmount_plugin.json")
 
 KcmNasmount::KcmNasmount(QObject *parent, const KPluginMetaData &metaData)
     : KQuickConfigModule(parent, metaData)

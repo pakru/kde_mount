@@ -1,5 +1,23 @@
 cmake_minimum_required(VERSION 3.20)
-project(nasmount VERSION 0.3 LANGUAGES CXX)
+
+# VERSION is the sole release-version source. Keeping it independent of the
+# build language lets packaging and release automation read the same value
+# without parsing CMake syntax.
+set(NASMOUNT_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+file(READ "${NASMOUNT_VERSION_FILE}" NASMOUNT_VERSION)
+string(STRIP "${NASMOUNT_VERSION}" NASMOUNT_VERSION)
+if(NOT NASMOUNT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR
+        "VERSION must contain exactly one MAJOR.MINOR.PATCH version; got "
+        "'${NASMOUNT_VERSION}'.")
+endif()
+
+project(nasmount VERSION "${NASMOUNT_VERSION}" LANGUAGES CXX)
+
+# A normal `cmake --build` must notice a version bump even when the user does
+# not explicitly run the configure command first.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${NASMOUNT_VERSION_FILE}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,6 +40,10 @@ set(CMAKE_AUTOMOC ON)
 
 set(NASMOUNT_HELPER_ID "io.github.pakru.nasmount")
 
+configure_file(src/core/nasmountversion.h.in
+               ${CMAKE_CURRENT_BINARY_DIR}/generated/nasmountversion.h
+               @ONLY)
+
 # ---------------------------------------------------------------------------
 # core — validation, unit-value encoding, and the read-only state model
 # (docs/credential-modes-design.md §§4-6). Linked into every binary,
@@ -34,7 +56,10 @@ add_library(nasmount-core STATIC
     src/core/unitvalue.cpp
     src/core/verify.cpp
 )
-target_include_directories(nasmount-core PUBLIC src/core)
+target_include_directories(nasmount-core PUBLIC
+    src/core
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
 target_link_libraries(nasmount-core PUBLIC Qt6::Core)
 
 # ---------------------------------------------------------------------------
@@ -250,5 +275,16 @@ add_test(NAME removed_api_gates
          COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/removed_api_gates.sh)
 set_tests_properties(removed_api_gates PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Protect the release contract at the generated boundaries: VERSION, CMake's
+# project version, the C++ runtime version, and KDE plugin metadata must agree.
+add_test(NAME version_metadata
+    COMMAND ${CMAKE_COMMAND}
+        -DVERSION_FILE=${NASMOUNT_VERSION_FILE}
+        -DGENERATED_HEADER=${CMAKE_CURRENT_BINARY_DIR}/generated/nasmountversion.h
+        -DKCM_METADATA=${CMAKE_CURRENT_BINARY_DIR}/src/kcm/kcm_nasmount_plugin.json
+        -DEXPECTED_VERSION=${PROJECT_VERSION}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_metadata_test.cmake
+)
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

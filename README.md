@@ -58,6 +58,19 @@ If one is installed, run `./uninstall.sh` first.
 shell scripts exist because they gate on the tests passing, refresh Dolphin's
 and System Settings' caches, and enable the boot coordinator.
 
+## Versioning and release artifacts
+
+[`VERSION`](VERSION) is the single source of truth for the release version and
+uses `MAJOR.MINOR.PATCH` format. CMake reads it as `PROJECT_VERSION`; the
+command-line programs' `--version` output and the KCM plugin metadata are
+generated from that value. A release bump therefore changes only `VERSION`.
+
+Future GitHub release automation can read the file without evaluating build
+scripts and use `nasmount-<version>-<platform>` for artifact names. Release
+tags should use the matching `v<version>` form (for example, version `0.3.0`
+uses tag `v0.3.0`). The workflow should reject a tag whose value does not match
+`VERSION` before publishing artifacts.
+
 Adding or removing a share requires **administrator authentication**
 (`auth_admin`): it writes a persistent root-owned credential under `/etc` and a
 unit that mounts before anyone signs in, which is the same authority as editing
@@ -70,9 +83,10 @@ never while using a mounted share. Listing state is read-only and unauthenticate
 make test              # or: ctest --test-dir build --output-on-failure
 ```
 
-Thirteen test binaries plus a script gate; `install.sh` runs every one and
-refuses to install if any fail. Privileged accept paths and real reboot /
-no-login behaviour must be validated in a disposable VM.
+Fourteen test binaries plus four source, metadata, and AppStream gates;
+`install.sh` runs every one and refuses to install if any fail. Privileged
+accept paths and real reboot / no-login behaviour must be validated in a
+disposable VM.
 
 ## Uninstall
 
@@ -87,4 +101,3 @@ refused, leaving everything installed for retry.
 It reads `build/install_manifest.txt` and refuses to run without it, so
 **uninstall works only from the build tree that installed** — after `make clean`,
 or in a fresh checkout, re-run `./install.sh` first.
-

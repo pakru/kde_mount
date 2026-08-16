@@ -1,12 +1,11 @@
 {
     "KPlugin": {
-        "Name": "Network Mounts",
-        "Description": "Add, edit and remove CIFS network mounts, backed by generated systemd units",
+        "Name": "SMB Network Mounts",
+        "Description": "Add and remove CIFS SMB network mounts",
         "Icon": "drive-network",
         "Id": "kcm_nasmount",
         "Category": "",
-        "FormFactors": [],
-        "Version": "1.0"
+        "FormFactors": []
     },
     "X-KDE-System-Settings-Parent-Category": "network",
     "X-KDE-Keywords": "cifs,smb,samba,network,mount,share,drive,nas"

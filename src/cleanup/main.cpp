@@ -1,9 +1,16 @@
 /*
+ * nasmount-cleanup — authenticated uninstall coordinator.
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * This remains an unprivileged command-line client: it validates the exact
+ * install manifest before asking the helper to purge privileged state, then
+ * removes the caller's configuration only after that purge is confirmed.
  */
 
 #include "cleanupvalidation.h"
 #include "helperinvoke.h"
+#include "nasmountversion.h"
 #include "store.h"
 #include "userlock.h"
 
@@ -15,10 +22,12 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("nasmount-cleanup"));
+    QCoreApplication::setApplicationVersion(QString::fromLatin1(Nasmount::Version));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Authenticated nasmount uninstall cleanup"));
     parser.addHelpOption();
+    parser.addVersionOption();
     QCommandLineOption manifestOption(QStringLiteral("manifest"), QStringLiteral("CMake install manifest"),
                                       QStringLiteral("path"));
     parser.addOption(manifestOption);
