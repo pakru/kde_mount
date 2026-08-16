@@ -1,15 +1,24 @@
 /*
- * runtimefiles — root-owned runtime records below /run/nasmount: the
+ * runtimefiles — root-owned runtime records under /run/nasmount-ids: the
  * automount instance id recorded at arm time (plan §2.1.4, §2.3.5-6).
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
+ * This tree is deliberately a top-level root, not a subdirectory of a
+ * private 0700 one: a nested subdirectory would inherit the parent's
+ * traversal bit, making any exception below it unreachable regardless of the
+ * file's own mode. /run/nasmount-ids is created 0755
+ * (ArtifactKind::PublicDirectory) holding only 0644
+ * ArtifactKind::PublicRecord files, so the "readable by any process"
+ * property is structural rather than a per-file exception inside an
+ * otherwise-private tree.
+ *
  * Writes only; reading the recorded automount id back is unprivileged (any
- * process may read a file under /run/nasmount/automount-ids to compute
+ * process may read a file under /run/nasmount-ids to compute
  * Verify::ActivationTrust) and stays in nasmount-core as
- * Verify::readRecordedAutomountId(). Everything here is root-only: only the
- * privileged helper (and the boot coordinator) ever creates, moves, or
- * removes one of these records.
+ * Verify::readRecordedAutomountId(). Everything here is root-only to write:
+ * only the privileged helper (and the boot coordinator) ever creates,
+ * moves, or removes one of these records.
  */
 
 #pragma once

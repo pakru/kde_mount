@@ -40,12 +40,10 @@ int main(int argc, char **argv)
 
     const QString valid = QStringLiteral(
         "/usr/bin/nasmount-dialog\n"
-        "/usr/bin/nasmount-supervisor\n"
         "/usr/bin/nasmount-cleanup\n"
         "/usr/lib/x86_64-linux-gnu/libexec/kf6/kauth/nasmount-helper\n"
         "/usr/lib/x86_64-linux-gnu/libexec/nasmount-boot\n"
         "/usr/lib/x86_64-linux-gnu/qt6/plugins/plasma/kcms/systemsettings/kcm_nasmount.so\n"
-        "/usr/lib/systemd/user/nasmount-session.service\n"
         "/usr/lib/systemd/system/nasmount-boot.service\n"
         "/usr/share/applications/kcm_nasmount.desktop\n"
         "/usr/share/polkit-1/actions/io.github.pakru.nasmount.policy\n"
@@ -57,7 +55,12 @@ int main(int argc, char **argv)
     QString error;
     check(QStringLiteral("complete allowlist accepted"),
           Session::validateInstallManifest(path, &targets, &error), error);
-    check(QStringLiteral("all targets returned"), targets.size() == 13);
+    // 11, not 13: nasmount-supervisor and nasmount-session.service are no
+    // longer installed -- there is no sign-in-scoped mode left for them to
+    // serve. The allowlist requires completeness, so this count and
+    // cleanupvalidation.cpp's requiredPatterns must move together.
+    check(QStringLiteral("all targets returned"), targets.size() == 11,
+          QString::number(targets.size()));
 
     check(QStringLiteral("write malicious manifest"), writeManifest(path, QStringLiteral("/etc/passwd\n")));
     error.clear();

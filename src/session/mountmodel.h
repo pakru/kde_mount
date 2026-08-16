@@ -49,7 +49,6 @@ enum class DisplayState { Inactive, Armed, Mounted, MissingCredentials, Broken, 
 struct RowClassifyInput {
     /** "pair" | "partial" | "tampered" | "notOurs" | "none". */
     QString definitionState = QStringLiteral("none");
-    UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
     UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
     /** Meaningful only when definitionState is "pair" or "partial". */
     Verify::RuntimeSnapshot runtime;
@@ -90,19 +89,18 @@ RowClassification classifyRow(const RowClassifyInput &input);
 
 /** Pure comparison used by the exact-ID Store/definition merge. The root
  *  definition remains authoritative; any differing canonical mount point,
- *  normalised UNC, mode, or authentication kind is local-record drift. An
+ *  normalised UNC, or authentication kind is local-record drift. Mode is no
+ *  longer compared: Store does not record one, because there is only one. An
  *  automount-only Partial has no validated What=, so UNC comparison is
  *  deferred until a mount half exists. */
-bool storeDefinitionDrift(const QString &storeUnc, const QString &storeMountPoint,
-                          UnitValue::CredentialMode storeMode, bool storeSaysGuest,
+bool storeDefinitionDrift(const QString &storeUnc, const QString &storeMountPoint, bool storeSaysGuest,
                           const QString &definitionWhat, const QString &definitionMountPoint,
-                          UnitValue::CredentialMode definitionMode,
                           UnitValue::AuthenticationKind definitionAuthentication);
 
 class MountModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_PROPERTY(bool hasSystemShares READ hasSystemShares NOTIFY refreshed)
+    Q_PROPERTY(bool hasShares READ hasShares NOTIFY refreshed)
     Q_PROPERTY(QString bootHealthText READ bootHealthText NOTIFY refreshed)
     Q_PROPERTY(bool bootHealthy READ bootHealthy NOTIFY refreshed)
 
@@ -113,17 +111,15 @@ public:
         MountPointRole,
         UsernameRole,
         DomainRole,
-        ReconnectRole,
         StateRole,
         StateTextRole,
         DetailRole,
         HasUnitFilesRole,
-        ModeRole,               ///< "session" | "system" -- from the validated marker, never Store
         AuthenticationRole,     ///< "credentials" | "guest"
         DefinitionStateRole,    ///< "pair" | "partial" | "tampered" | "notOurs" | "none"
         HasStoreRecordRole,     ///< whether an id (and so the id-based actions) applies to this row
         StoreCorruptRole,
-        DriftRole,               ///< Store disagrees with the marker on mode/authentication
+        DriftRole,               ///< Store disagrees with the marker on authentication
         CredentialApplicableRole, ///< only meaningful when true; a guest row never has a credential to check
         CredentialHealthyRole,
         CanRemoveDefinitionRole,   ///< Delete is offered
@@ -144,7 +140,7 @@ public:
     /** Whether at least one row is System mode -- gates the boot-health
      *  banner's visibility (design §7.1.8: shown as global health, not
      *  noise for a Session-only configuration). */
-    bool hasSystemShares() const;
+    bool hasShares() const;
     QString bootHealthText() const;
     bool bootHealthy() const;
 
@@ -175,8 +171,6 @@ private:
         QString username;
         QString domain;
         QString definitionWhat; ///< validated .mount What=; empty for automount-only Partial
-        bool reconnect = false;
-        UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
         UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
         QString definitionState = QStringLiteral("none");
         /** Computed once, from source 2, and reused when source 3's fresh

@@ -68,7 +68,6 @@ int main(int argc, char **argv)
         share.unc = QStringLiteral("//host/Share");
         share.mountPoint = QStringLiteral("/mnt/one");
         share.username = QStringLiteral("alice");
-        share.reconnect = true;
 
         QString error;
         check(QStringLiteral("insert (expectedGeneration=0) succeeds"),
@@ -79,10 +78,8 @@ int main(int argc, char **argv)
         check(QStringLiteral("record is not corrupt"), !snap.corrupt);
         check(QStringLiteral("fields round-trip"),
               snap.share.unc == share.unc && snap.share.mountPoint == share.mountPoint
-                  && snap.share.username == share.username && snap.share.reconnect == share.reconnect);
+                  && snap.share.username == share.username);
         check(QStringLiteral("generation is 1 after one commit"), snap.generation == 1, QString::number(snap.generation));
-        check(QStringLiteral("mode defaults to Session"), snap.share.mode == UnitValue::CredentialMode::Session);
-        check(QStringLiteral("rememberPassword defaults to false"), !snap.share.rememberPassword);
     }
 
     out << "=== commitShare: generation-conflict on a duplicate insert (plan §1.6.7) ===" << Qt::endl;

@@ -10,6 +10,6 @@ Actions=mountAsDrive;
 
 [Desktop Action mountAsDrive]
 Name=Mount as Network Drive…
-Comment=Mount this SMB share, with the password kept in KWallet
+Comment=Mount this SMB share on demand, available again after a reboot
 Icon=drive-network
 Exec=@KDE_INSTALL_FULL_BINDIR@/nasmount-dialog %u

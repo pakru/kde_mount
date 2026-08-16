@@ -11,41 +11,38 @@ namespace Root::RuntimeFiles
 namespace
 {
 
-/** Opens (creating as needed) /run/nasmount/<subdir>, root-owned 0700. */
-int openRuntimeSubdir(const QString &subdir, QString *error)
+/** Opens (creating as needed) /run/nasmount-ids, root-owned 0755 — see the
+ *  file comment for why this is a sibling of /run/nasmount rather than a
+ *  subdirectory of it. */
+int openIdDir(QString *error)
 {
     const int runFd = DurableFs::openSystemRoot(QStringLiteral("/run"), error);
     if (runFd < 0) {
         return -1;
     }
-    const int nasmountFd = DurableFs::createAndVerifyDir(runFd, QStringLiteral("nasmount"), error);
+    const int idsFd = DurableFs::createAndVerifyDir(runFd, QStringLiteral("nasmount-ids"),
+                                                     DurableFs::ArtifactKind::PublicDirectory, error);
     ::close(runFd);
-    if (nasmountFd < 0) {
-        return -1;
-    }
-    const int subFd = DurableFs::createAndVerifyDir(nasmountFd, subdir, error);
-    ::close(nasmountFd);
-    return subFd;
+    return idsFd;
 }
 
 } // namespace
 
 bool writeAutomountId(const QString &unitName, uint64_t id, QString *error)
 {
-    const int dirFd = openRuntimeSubdir(QStringLiteral("automount-ids"), error);
+    const int dirFd = openIdDir(error);
     if (dirFd < 0) {
         return false;
     }
     const QByteArray content = QByteArray::number(static_cast<qulonglong>(id));
-    const bool ok =
-        DurableFs::durableReplace(dirFd, unitName, content, DurableFs::ArtifactKind::SensitiveFile, error);
+    const bool ok = DurableFs::durableReplace(dirFd, unitName, content, DurableFs::ArtifactKind::PublicRecord, error);
     ::close(dirFd);
     return ok;
 }
 
 bool removeAutomountId(const QString &unitName, QString *error)
 {
-    const int dirFd = openRuntimeSubdir(QStringLiteral("automount-ids"), error);
+    const int dirFd = openIdDir(error);
     if (dirFd < 0) {
         return false;
     }

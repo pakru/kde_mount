@@ -52,16 +52,6 @@ int main(int argc, char **argv)
               !Session::guestFieldsConsistent(QString(), QStringLiteral("WORKGROUP"), QStringLiteral("hunter2")));
     }
 
-    out << "=== modeRoutedAction: mode-correct action-name routing (plan §7.3.2) ===" << Qt::endl;
-    {
-        check(QStringLiteral("Session undefine -> undefine, unchanged"),
-              Session::modeRoutedAction(QStringLiteral("undefine"), UnitValue::CredentialMode::Session)
-                  == QStringLiteral("undefine"));
-        check(QStringLiteral("System undefine -> undefinesystem"),
-              Session::modeRoutedAction(QStringLiteral("undefine"), UnitValue::CredentialMode::System)
-                  == QStringLiteral("undefinesystem"));
-    }
-
     out << Qt::endl << passed << " passed, " << failed << " failed" << Qt::endl;
     return failed == 0 ? 0 : 1;
 }

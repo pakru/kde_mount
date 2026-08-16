@@ -46,7 +46,6 @@ struct DefineInput {
     /** Hard-coded by the caller from which entry point was invoked --
      *  Session for `define`, System for `definesystem` (design §7.1). Never
      *  derived from a caller-supplied argument. */
-    UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
 
     /** System + authenticated only: written after both unit halves exist
      *  (simplification-implementation-plan.md §4, corrected ordering).
@@ -95,7 +94,6 @@ struct RemovalInput {
     uid_t ownerUid = 0;
     gid_t ownerGid = 0;
     QString shareId;
-    UnitValue::CredentialMode mode;
     UnitValue::AuthenticationKind authentication;
     QString mountPoint;
     QString unitName;

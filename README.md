@@ -7,19 +7,21 @@ helper `io.github.pakru.nasmount`.
 It mounts CIFS/SMB shares as real kernel mounts at **any path you choose**, using
 generated static systemd `.mount`/`.automount` pairs. A share mounts **on demand**
 — the first time a process opens its path — and the idle timeout releases it
-while the trigger stays armed. Session shares keep their password in KWallet and
-arm at sign-in; System shares are an opt-in whose root-owned credential survives
-reboot and arms at boot, before login.
+while the trigger stays armed. A share's credential is a root-owned file that
+survives reboot, and the trigger is armed at boot before anyone logs in — so a
+saved share is simply there again after a restart, with nothing to re-enter and
+nothing to arm by hand.
 
 | Tool | Kernel mount | Arbitrary mount path | Password store |
 |------|--------------|----------------------|-----------------|
 | Dolphin `smb://` + kio-fuse | no (FUSE) | no | KWallet |
 | Smb4K | yes | no — derived from host/share | KWallet |
-| this | yes | **yes** | KWallet, or a root-owned `/etc` credential |
+| this | yes | **yes** | root-owned `/etc` credential |
 
-Two ways in, one backend: **System Settings → Network Mounts** to list, add and
-remove shares with live state for each, or the **Dolphin service menu** —
-right-click an `smb://` share → **Mount as Network Drive…**.
+Two ways in, one backend — and now literally one dialog: **System Settings →
+Network Mounts** to list, add and remove shares with live state for each, or
+the **Dolphin service menu** (right-click an `smb://` share → **Mount as
+Network Drive…**). Both render the same `ShareForm.qml`.
 
 ## Requirements
 
@@ -54,12 +56,13 @@ If one is installed, run `./uninstall.sh` first.
 
 `make` builds into `build/` without installing; `make clean` removes it. The
 shell scripts exist because they gate on the tests passing, refresh Dolphin's
-and System Settings' caches, and enable both lifecycle services.
+and System Settings' caches, and enable the boot coordinator.
 
-The KAuth policy is **passwordless for active local users** (`allow_active=yes`,
-as in Smb4K's mount helper) and assumes the person at the machine is its
-administrator — if that does not hold where you deploy this, read the design
-document's safety model first.
+Adding or removing a share requires **administrator authentication**
+(`auth_admin`): it writes a persistent root-owned credential under `/etc` and a
+unit that mounts before anyone signs in, which is the same authority as editing
+`/etc` by hand. That prompt appears once per add or remove — never at boot, and
+never while using a mounted share. Listing state is read-only and unauthenticated.
 
 ## Tests
 
@@ -78,16 +81,10 @@ no-login behaviour must be validated in a disposable VM.
 ```
 
 An authenticated full purge: every managed share, its credentials and runtime
-records, the `nasmount` KWallet folder, `~/.config/nasmountrc`, then the software
-itself. Mount points are retained; tampered state or an unsafe live mount is
+records, `~/.config/nasmountrc`, then the software itself. Mount points are retained; tampered state or an unsafe live mount is
 refused, leaving everything installed for retry.
 
 It reads `build/install_manifest.txt` and refuses to run without it, so
 **uninstall works only from the build tree that installed** — after `make clean`,
 or in a fresh checkout, re-run `./install.sh` first.
 
-## Further reading
-
-- [`docs/credential-modes-design.md`](docs/credential-modes-design.md) — state
-  model, safety and authorisation rules, session lifecycle, blocked operations.
-- [`AGENTS.md`](AGENTS.md) — architecture, privilege invariants, conventions.

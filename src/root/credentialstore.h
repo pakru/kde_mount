@@ -33,7 +33,7 @@ namespace Root::CredentialStore
  * failure here leaves the previous file, if any, untouched (durablefs's
  * durableReplace() contract).
  */
-bool write(UnitValue::CredentialMode mode, const QString &id, const QString &username, const QString &domain,
+bool write(const QString &id, const QString &username, const QString &domain,
           const QString &password, QString *error);
 
 /**
@@ -41,7 +41,7 @@ bool write(UnitValue::CredentialMode mode, const QString &id, const QString &use
  * an idempotent, phase-authorised absence from a reported failure — a caller
  * that expects the file to exist should pass false.
  */
-bool remove(UnitValue::CredentialMode mode, const QString &id, bool allowMissing, QString *error);
+bool remove(const QString &id, bool allowMissing, QString *error);
 
 /**
  * Validates that the credentials file for `mode`/`id` exists and is healthy
@@ -51,7 +51,7 @@ bool remove(UnitValue::CredentialMode mode, const QString &id, bool allowMissing
  * starting a trigger (design §10.2); a missing, symlinked, or wrong-mode
  * file must leave the share unarmed, never silently skipped.
  */
-bool healthy(UnitValue::CredentialMode mode, const QString &id, QString *error);
+bool healthy(const QString &id, QString *error);
 
 /**
  * Asserts no credential file exists for `mode`/`id` — used by guest
@@ -60,6 +60,6 @@ bool healthy(UnitValue::CredentialMode mode, const QString &id, QString *error);
  * Returns false (with `error` empty) if a credential file unexpectedly
  * exists; `error` is set only for an actual I/O failure while checking.
  */
-bool assertAbsent(UnitValue::CredentialMode mode, const QString &id, QString *error);
+bool assertAbsent(const QString &id, QString *error);
 
 } // namespace Root::CredentialStore

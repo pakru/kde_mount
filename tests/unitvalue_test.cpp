@@ -118,21 +118,17 @@ int main(int argc, char **argv)
         const QString id = QStringLiteral("0123456789abcdef0123456789abcdef");
 
         const struct {
-            UnitValue::CredentialMode mode;
             UnitValue::AuthenticationKind auth;
             const char *label;
         } combos[] = {
-            {UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Credentials, "session/credentials"},
-            {UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Guest, "session/guest"},
-            {UnitValue::CredentialMode::System, UnitValue::AuthenticationKind::Credentials, "system/credentials"},
-            {UnitValue::CredentialMode::System, UnitValue::AuthenticationKind::Guest, "system/guest"},
+            {UnitValue::AuthenticationKind::Credentials, "credentials"},
+            {UnitValue::AuthenticationKind::Guest, "guest"},
         };
         for (const auto &combo : combos) {
             UnitValue::Marker in;
             in.ownerUid = uid;
             in.ownerGid = gid;
             in.id = id;
-            in.mode = combo.mode;
             in.authentication = combo.auth;
 
             const QString content = UnitValue::markerComment(in);
@@ -155,7 +151,6 @@ int main(int argc, char **argv)
         in.ownerUid = 1000;
         in.ownerGid = 1000;
         in.id = QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        in.mode = UnitValue::CredentialMode::System;
         in.authentication = UnitValue::AuthenticationKind::Credentials;
         const QString content = QStringLiteral("# Managed by nasmount — do not edit by hand.\n%1"
                                                 "[Unit]\nDescription=nasmount: //host/share\n\n"
@@ -177,7 +172,7 @@ int main(int argc, char **argv)
                 QStringLiteral("# X-Nasmount-Owner-Uid=1000"),
                 QStringLiteral("# X-Nasmount-Owner-Gid=1000"),
                 QStringLiteral("# X-Nasmount-Id=%1").arg(id),
-                QStringLiteral("# X-Nasmount-Mode=session"),
+                QStringLiteral("# X-Nasmount-Mode=system"),
                 QStringLiteral("# X-Nasmount-Authentication=credentials"),
             };
         };

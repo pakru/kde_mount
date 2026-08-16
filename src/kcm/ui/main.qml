@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -14,15 +16,13 @@ Item {
 
     KCMUtils.ConfigModule.buttons: KCMUtils.ConfigModule.NoAdditionalButton
 
-    // Mirrors Session::DisplayState (mountmodel.h) — kept in one place so a
-    // reorder there is a compile error here too, not a silent UI mismatch.
-    readonly property int stateInactive: 0
-    readonly property int stateArmed: 1
-    readonly property int stateMounted: 2
-    readonly property int stateMissingCredentials: 3
-    readonly property int stateBroken: 4
-    readonly property int stateBusy: 5
-    readonly property int stateForeign: 6
+    // The numeric Session::DisplayState mirror that used to live here is
+    // gone with the runtime verbs that were the only thing switching on it.
+    // This page now shows state only as text (model.stateText), so nothing
+    // here has to track the enum's ordering. Reintroducing the constants
+    // would reintroduce a mirror QML cannot check: it resolves these at
+    // runtime, so a reorder in mountmodel.h would silently mismatch rather
+    // than fail to build.
 
     Connections {
         target: kcm.actions
@@ -33,7 +33,6 @@ Item {
         function onFinished(id, kind, success, message) {
             busyIndicator.running = false
             statusLabel.text = message
-            statusLabel.color = palette.text
             kcm.shareModel.refresh()
         }
     }
@@ -47,9 +46,9 @@ Item {
             Layout.fillWidth: true
 
             QQC2.Label {
-                text: "Network mounts, mounted on demand — Session shares armed at sign-in, System shares at boot"
-                Layout.fillWidth: true
+                text: "Network mounts, mounted on demand — armed at startup, before anyone signs in"
                 wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
             QQC2.BusyIndicator {
                 id: busyIndicator
@@ -66,28 +65,27 @@ Item {
         }
 
         // design §7.1.8/§7.4.8: global boot-coordinator health, never
-        // overriding a specific share's own row state -- shown only when it
-        // is actually relevant (a System share exists, or the coordinator
-        // itself is unhealthy), not as constant noise for Session-only use.
+        // overriding a specific share's own row state. Every share is now
+        // boot-armed, so this is relevant whenever any share exists at all.
         QQC2.Pane {
-            Layout.fillWidth: true
-            visible: kcm.shareModel.hasSystemShares || !kcm.shareModel.bootHealthy
+            visible: kcm.shareModel.hasShares || !kcm.shareModel.bootHealthy
             contentItem: RowLayout {
                 QQC2.Label {
                     text: kcm.shareModel.bootHealthy ? "✓" : "⚠"
                 }
                 QQC2.Label {
                     text: "Boot coordinator: " + kcm.shareModel.bootHealthText
-                    Layout.fillWidth: true
                     wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
                 }
             }
+            Layout.fillWidth: true
         }
 
         QQC2.ScrollView {
+            clip: true
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
 
             ListView {
                 id: listView
@@ -95,99 +93,80 @@ Item {
                 spacing: 6
 
                 delegate: QQC2.Pane {
+                    id: delegateRoot
                     width: listView.width
+
+                    required property string shareId
+                    required property string unc
+                    required property string mountPoint
+                    required property string stateText
+                    required property string detail
+                    required property bool hasUnitFiles
+                    required property bool hasStoreRecord
+                    required property bool drift
+                    required property bool canRemoveDefinition
+                    required property bool canRemoveLocalRecord
+                    required property bool requiresAdministrator
 
                     contentItem: RowLayout {
                         spacing: 8
 
                         ColumnLayout {
-                            Layout.fillWidth: true
                             spacing: 2
+                            Layout.fillWidth: true
                             RowLayout {
                                 spacing: 6
                                 QQC2.Label {
-                                    text: model.mountPoint
+                                    text: delegateRoot.mountPoint
                                     font.bold: true
                                     elide: Text.ElideMiddle
                                     Layout.fillWidth: true
                                 }
                                 QQC2.Label {
-                                    visible: model.mode === "system"
-                                    text: "System"
-                                    opacity: 0.7
-                                    font.italic: true
-                                }
-                                QQC2.Label {
-                                    visible: model.drift
+                                    visible: delegateRoot.drift
                                     text: "⚠ drift"
                                     color: palette.text
                                     opacity: 0.8
                                 }
                             }
                             QQC2.Label {
-                                text: model.unc + "  —  " + model.stateText
-                                      + (model.detail.length > 0 ? ("  (" + model.detail + ")") : "")
+                                text: delegateRoot.unc + "  —  " + delegateRoot.stateText
+                                      + (delegateRoot.detail.length > 0 ? ("  (" + delegateRoot.detail + ")") : "")
                                 opacity: 0.7
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                         }
 
-                        // --- Session-only runtime verbs. Never shown for a
-                        // row that requires administrator repair -- those
-                        // never offer casual action buttons at all. ---------
-                        QQC2.Button {
-                            visible: model.hasStoreRecord && model.hasUnitFiles && !model.requiresAdministrator
-                                     && model.mode === "session"
-                                     && (model.state === stateInactive || model.state === stateMissingCredentials)
-                            text: "Connect"
-                            onClicked: connectDialog.openFor(model.shareId, model.username)
-                        }
-                        QQC2.Button {
-                            visible: model.hasStoreRecord && model.hasUnitFiles && !model.requiresAdministrator
-                                     && model.mode === "session" && model.state === stateArmed
-                            text: "Mount now"
-                            onClicked: kcm.actions.mountNowShare(model.shareId)
-                        }
-                        QQC2.Button {
-                            visible: model.hasStoreRecord && model.hasUnitFiles && !model.requiresAdministrator
-                                     && model.mode === "session" && model.state === stateMounted
-                            text: "Unmount now"
-                            onClicked: kcm.actions.unmountNowShare(model.shareId)
-                        }
-                        QQC2.Button {
-                            visible: model.hasStoreRecord && model.hasUnitFiles && !model.requiresAdministrator
-                                     && model.mode === "session"
-                                     && (model.state === stateArmed || model.state === stateMounted
-                                         || model.state === stateMissingCredentials)
-                            text: "Disarm"
-                            onClicked: kcm.actions.disarmShare(model.shareId)
-                        }
+                        // There are no runtime verbs: a share is armed at
+                        // boot and mounts on first access, so there is
+                        // nothing to connect, arm, or mount by hand. What
+                        // remains is removal.
 
                         // --- removal, driven directly by the backend's own
                         // actionability booleans (simplification plan §4
                         // action 8) -- QML never reproduces the safety rule
                         // behind them. ---------------------------------------
                         QQC2.Button {
-                            visible: model.hasStoreRecord && model.hasUnitFiles && model.canRemoveDefinition
+                            visible: delegateRoot.hasStoreRecord && delegateRoot.hasUnitFiles && delegateRoot.canRemoveDefinition
                             text: "Delete"
-                            onClicked: deleteConfirm.openFor(model.shareId, model.mountPoint)
+                            onClicked: deleteConfirm.openFor(delegateRoot.shareId, delegateRoot.mountPoint)
                         }
                         QQC2.Button {
-                            visible: !model.hasStoreRecord && model.hasUnitFiles && model.canRemoveDefinition
+                            visible: !delegateRoot.hasStoreRecord && delegateRoot.hasUnitFiles && delegateRoot.canRemoveDefinition
                             text: "Remove"
-                            onClicked: kcm.actions.removeOrphanByPath(model.mountPoint)
+                            onClicked: kcm.actions.removeOrphanByPath(delegateRoot.mountPoint)
                         }
                         QQC2.Button {
-                            visible: model.hasStoreRecord && model.canRemoveLocalRecord
+                            visible: delegateRoot.hasStoreRecord && delegateRoot.canRemoveLocalRecord
                             text: "Remove record"
-                            onClicked: kcm.actions.removeOrphanedRecord(model.shareId)
+                            onClicked: kcm.actions.removeOrphanedRecord(delegateRoot.shareId)
                         }
 
                         // --- administrator-only (Tampered/NotOurs/untrusted-
                         // active): visible, never casually actionable -------
                         QQC2.Label {
-                            visible: model.requiresAdministrator
+                            visible: delegateRoot.requiresAdministrator
                             text: "Requires administrator repair"
                             opacity: 0.7
                             font.italic: true
@@ -206,9 +185,10 @@ Item {
 
         QQC2.Label {
             id: statusLabel
-            Layout.fillWidth: true
             visible: text.length > 0
             wrapMode: Text.WordWrap
+            color: root.palette.text
+            Layout.fillWidth: true
         }
     }
 
@@ -218,21 +198,25 @@ Item {
         anchors.centerIn: parent
     }
 
-    ConnectDialog {
-        id: connectDialog
-        parent: root
-        anchors.centerIn: parent
-    }
-
     QQC2.Dialog {
         id: deleteConfirm
+
+        property string targetId: ""
+
         parent: root
         anchors.centerIn: parent
+        width: Math.min(root.width - 40, 460)
         modal: true
         title: "Remove network mount"
         standardButtons: QQC2.Dialog.Yes | QQC2.Dialog.Cancel
 
-        property string targetId: ""
+        onAccepted: kcm.actions.deleteShare(targetId)
+
+        QQC2.Label {
+            id: label
+            width: parent.width
+            wrapMode: Text.WordWrap
+        }
 
         function openFor(id, mountPoint) {
             targetId = id
@@ -240,12 +224,5 @@ Item {
                        + "If it is currently mounted, it will be disarmed and unmounted first."
             open()
         }
-
-        QQC2.Label {
-            id: label
-            wrapMode: Text.WordWrap
-        }
-
-        onAccepted: kcm.actions.deleteShare(targetId)
     }
 }

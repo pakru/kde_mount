@@ -136,14 +136,16 @@ int main(int argc, char **argv)
         check(QStringLiteral("parent opened"), parentFd >= 0);
 
         QString error;
-        const int missing = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("nope"), &error);
+        const int missing = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("nope"),
+                                                              Root::DurableFs::ArtifactKind::Directory, &error);
         check(QStringLiteral("missing name -> -1, empty error (ENOENT, ordinary absence)"), missing < 0 && error.isEmpty(),
               error);
 
         // createAndVerifyDir creates the directory (as the test's own uid,
         // since there is no root here), then must still refuse it: the
         // fixed policy demands uid 0, and this test process is not root.
-        const int created = Root::DurableFs::createAndVerifyDir(parentFd, QStringLiteral("subdir"), &error);
+        const int created = Root::DurableFs::createAndVerifyDir(parentFd, QStringLiteral("subdir"),
+                                                                 Root::DurableFs::ArtifactKind::Directory, &error);
         check(QStringLiteral("created-but-not-root-owned directory is refused, not silently accepted"),
               created < 0, error);
         check(QStringLiteral("the rejection reason names the uid mismatch"), error.contains(QStringLiteral("uid")),
@@ -151,20 +153,23 @@ int main(int argc, char **argv)
 
         QDir(tmp.path()).mkdir(QStringLiteral("plain"));
         QString error2;
-        const int plainDir = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("plain"), &error2);
+        const int plainDir = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("plain"),
+                                                               Root::DurableFs::ArtifactKind::Directory, &error2);
         check(QStringLiteral("an existing but non-root-owned directory is refused"), plainDir < 0, error2);
         check(QStringLiteral("(this refusal has a non-empty reason, unlike plain ENOENT)"), !error2.isEmpty());
 
         check(QStringLiteral("a symlink planted at the name is refused, never followed"), [&] {
             QFile::link(tmp.path(), tmp.filePath(QStringLiteral("linked")));
             QString linkError;
-            const int r = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("linked"), &linkError);
+            const int r = Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("linked"),
+                                                            Root::DurableFs::ArtifactKind::Directory, &linkError);
             return r < 0 && !linkError.isEmpty();
         }());
 
         check(QStringLiteral("a name containing '/' is rejected outright"), [&] {
             QString pathError;
-            return Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("a/b"), &pathError) < 0;
+            return Root::DurableFs::openVerifiedDir(parentFd, QStringLiteral("a/b"),
+                                                     Root::DurableFs::ArtifactKind::Directory, &pathError) < 0;
         }());
 
         if (parentFd >= 0) {
@@ -237,13 +242,18 @@ int main(int argc, char **argv)
         QString error;
 
         check(QStringLiteral("removing an already-absent tree is idempotent success"),
-              Root::DurableFs::durableRemoveTree(parentFd, QStringLiteral("never-existed"), &error), error);
+              Root::DurableFs::durableRemoveTree(parentFd, QStringLiteral("never-existed"),
+                                                 Root::DurableFs::ArtifactKind::Directory,
+                                                 Root::DurableFs::ArtifactKind::SensitiveFile, &error),
+              error);
 
         QDir(tmp.path()).mkdir(QStringLiteral("mytree"));
         // Owned by this test's own uid, not root -- durableRemoveTree's
         // first step (openVerifiedDir) must refuse it rather than delete
         // through a directory it cannot prove is ours.
-        const bool removed = Root::DurableFs::durableRemoveTree(parentFd, QStringLiteral("mytree"), &error);
+        const bool removed = Root::DurableFs::durableRemoveTree(parentFd, QStringLiteral("mytree"),
+                                                                 Root::DurableFs::ArtifactKind::Directory,
+                                                                 Root::DurableFs::ArtifactKind::SensitiveFile, &error);
         check(QStringLiteral("a non-root-owned directory is refused, not deleted through"), !removed, error);
         check(QStringLiteral("the directory still exists"), QDir(tmp.path()).exists(QStringLiteral("mytree")));
 

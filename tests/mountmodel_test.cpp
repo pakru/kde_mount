@@ -97,12 +97,11 @@ Verify::RuntimeSnapshot indeterminateAutomountSnapshot()
     return s;
 }
 
-RowClassifyInput pairInput(UnitValue::CredentialMode mode, UnitValue::AuthenticationKind auth,
-                           const Verify::RuntimeSnapshot &rt, bool credApplicable = false, bool credHealthy = true)
+RowClassifyInput pairInput(UnitValue::AuthenticationKind auth, const Verify::RuntimeSnapshot &rt,
+                           bool credApplicable = false, bool credHealthy = true)
 {
     RowClassifyInput in;
     in.definitionState = QStringLiteral("pair");
-    in.mode = mode;
     in.authentication = auth;
     in.runtime = rt;
     in.credentialApplicable = credApplicable;
@@ -130,45 +129,37 @@ int main(int argc, char **argv)
         using Session::storeDefinitionDrift;
         check(QStringLiteral("matching Store and definition are not drift"),
               !storeDefinitionDrift(QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session, /*storeSaysGuest=*/false,
+                                    /*storeSaysGuest=*/false,
                                     QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session,
                                     UnitValue::AuthenticationKind::Credentials));
         check(QStringLiteral("equivalent UNC with trailing slash is normalised"),
               !storeDefinitionDrift(QStringLiteral("//host/share/"), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session, /*storeSaysGuest=*/false,
+                                    /*storeSaysGuest=*/false,
                                     QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session,
                                     UnitValue::AuthenticationKind::Credentials));
         check(QStringLiteral("mount-point mismatch is drift"),
               storeDefinitionDrift(QStringLiteral("//host/share"), QStringLiteral("/mnt/other"),
-                                   UnitValue::CredentialMode::Session, /*storeSaysGuest=*/false,
+                                   /*storeSaysGuest=*/false,
                                    QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session,
                                    UnitValue::AuthenticationKind::Credentials));
         check(QStringLiteral("UNC mismatch is drift"),
               storeDefinitionDrift(QStringLiteral("//host/other"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session, /*storeSaysGuest=*/false,
+                                   /*storeSaysGuest=*/false,
                                    QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session,
                                    UnitValue::AuthenticationKind::Credentials));
-        check(QStringLiteral("mode mismatch is drift"),
-              storeDefinitionDrift(QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::System, /*storeSaysGuest=*/false,
-                                   QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session,
-                                   UnitValue::AuthenticationKind::Credentials));
+        // There is no "mode mismatch is drift" case any more: Store records
+        // no mode, because a share has only one lifecycle. Mode remains
+        // authoritative from the marker, but there is nothing local left for
+        // it to disagree with.
         check(QStringLiteral("authentication mismatch is drift"),
               storeDefinitionDrift(QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session, /*storeSaysGuest=*/true,
+                                   /*storeSaysGuest=*/true,
                                    QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                   UnitValue::CredentialMode::Session,
                                    UnitValue::AuthenticationKind::Credentials));
         check(QStringLiteral("automount-only Partial defers unavailable UNC comparison"),
               !storeDefinitionDrift(QStringLiteral("//host/share"), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session, /*storeSaysGuest=*/false,
+                                    /*storeSaysGuest=*/false,
                                     QString(), QStringLiteral("/mnt/share"),
-                                    UnitValue::CredentialMode::Session,
                                     UnitValue::AuthenticationKind::Credentials));
     }
 
@@ -212,7 +203,7 @@ int main(int argc, char **argv)
 
     out << "=== Store drift / corruption on an owned Pair ===" << Qt::endl;
     {
-        RowClassifyInput in = pairInput(UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Credentials,
+        RowClassifyInput in = pairInput(UnitValue::AuthenticationKind::Credentials,
                                         mountedMatchSnapshot());
         in.hasStoreRecord = true;
         in.drift = true;
@@ -221,7 +212,7 @@ int main(int argc, char **argv)
         checkActionability(QStringLiteral("drift"), c, false, true, false);
     }
     {
-        RowClassifyInput in = pairInput(UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Credentials,
+        RowClassifyInput in = pairInput(UnitValue::AuthenticationKind::Credentials,
                                         inactiveSnapshot());
         in.hasStoreRecord = true;
         in.storeCorrupt = true;
@@ -268,71 +259,67 @@ int main(int argc, char **argv)
 
     out << "=== Pair: runtime-only classification (guest, or no fresh credential data) ===" << Qt::endl;
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Guest, inactiveSnapshot()));
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Guest, inactiveSnapshot()));
         check(QStringLiteral("guest, inactive -> Inactive"), c.state == DisplayState::Inactive);
         checkActionability(QStringLiteral("guest inactive"), c, true, false, false);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Guest, armedTrustedSnapshot()));
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Guest, armedTrustedSnapshot()));
         check(QStringLiteral("guest, armed -> Armed"), c.state == DisplayState::Armed);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Guest, mountedMatchSnapshot()));
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Guest, mountedMatchSnapshot()));
         check(QStringLiteral("guest, mounted -> Mounted"), c.state == DisplayState::Mounted);
     }
     {
         // Guest rows never have credentialApplicable set, but even if a
         // caller mistakenly passed unhealthy data, rule 4 (design §4.4)
         // makes it inert for a guest row.
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System, UnitValue::AuthenticationKind::Guest,
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Guest,
                                              armedTrustedSnapshot(), /*credApplicable=*/false,
                                              /*credHealthy=*/false));
         check(QStringLiteral("guest ignores credential health even if somehow flagged"),
               c.state == DisplayState::Armed);
     }
 
-    out << "=== Pair: the mode-dependent credential rule (design/simplification §4.4) ===" << Qt::endl;
+    out << "=== Pair: the credential rule (design §4.4) ===" << Qt::endl;
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
+        // The credential is persistent and root-owned, so its absence is an
+        // error whether or not the trigger is currently armed. The old
+        // mode-dependent rule -- absence tolerated while inactive, because a
+        // sign-in-scoped credential legitimately only existed while armed --
+        // went away with that mode.
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
-        check(QStringLiteral("inactive Session + missing credential -> Inactive (absence expected)"),
-              c.state == DisplayState::Inactive);
-    }
-    {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
-                                             /*credApplicable=*/true, /*credHealthy=*/false));
-        check(QStringLiteral("active Session + missing credential -> MissingCredentials"),
+        check(QStringLiteral("inactive + missing credential -> MissingCredentials"),
               c.state == DisplayState::MissingCredentials);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, mountedMatchSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
+                                             /*credApplicable=*/true, /*credHealthy=*/false));
+        check(QStringLiteral("armed + missing credential -> MissingCredentials"),
+              c.state == DisplayState::MissingCredentials);
+    }
+    {
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, mountedMatchSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("mounted Session + missing credential -> MissingCredentials"),
               c.state == DisplayState::MissingCredentials);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("inactive System + missing credential -> MissingCredentials (persistent, always expected)"),
               c.state == DisplayState::MissingCredentials);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("active System + missing credential -> MissingCredentials"),
               c.state == DisplayState::MissingCredentials);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/true));
         check(QStringLiteral("inactive System + healthy credential -> Inactive"), c.state == DisplayState::Inactive);
     }
@@ -340,8 +327,7 @@ int main(int argc, char **argv)
         // No fresh inventory data this refresh (credentialApplicable still
         // false) must not be mistaken for "missing" -- the row keeps its
         // runtime-only classification.
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
                                              /*credApplicable=*/false, /*credHealthy=*/false));
         check(QStringLiteral("no fresh credential data yet -> runtime-only Inactive, not guessed as missing"),
               c.state == DisplayState::Inactive);
@@ -349,23 +335,20 @@ int main(int argc, char **argv)
 
     out << "=== Pair: runtime safety always wins over credential health (rule 1) ===" << Qt::endl;
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, armedUntrustedSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, armedUntrustedSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("untrusted active + missing credential -> Broken, not MissingCredentials"),
               c.state == DisplayState::Broken);
         checkActionability(QStringLiteral("untrusted-active + missing credential"), c, false, false, true);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, indeterminateAutomountSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, indeterminateAutomountSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("indeterminate + missing credential -> Busy, not MissingCredentials"),
               c.state == DisplayState::Busy);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, mountedMismatchSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, mountedMismatchSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         check(QStringLiteral("non-correlating live mount + missing credential -> Busy, not MissingCredentials"),
               c.state == DisplayState::Busy);
@@ -373,27 +356,23 @@ int main(int argc, char **argv)
 
     out << "=== Pair: healthy/clean runtime states and their actionability ===" << Qt::endl;
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, inactiveSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/true));
         check(QStringLiteral("healthy inactive Session -> Inactive"), c.state == DisplayState::Inactive);
         checkActionability(QStringLiteral("healthy Inactive"), c, true, false, false);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/true));
         checkActionability(QStringLiteral("healthy Armed"), c, true, false, false);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::Session,
-                                             UnitValue::AuthenticationKind::Credentials, mountedMatchSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, mountedMatchSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/true));
         checkActionability(QStringLiteral("healthy Mounted"), c, true, false, false);
     }
     {
-        const auto c = classifyRow(pairInput(UnitValue::CredentialMode::System,
-                                             UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
+        const auto c = classifyRow(pairInput(UnitValue::AuthenticationKind::Credentials, armedTrustedSnapshot(),
                                              /*credApplicable=*/true, /*credHealthy=*/false));
         checkActionability(QStringLiteral("MissingCredentials (active)"), c, true, false, false);
     }

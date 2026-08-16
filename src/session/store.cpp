@@ -6,27 +6,15 @@
 
 #include <KConfigGroup>
 #include <KSharedConfig>
-#include <KWallet>
 
 #include <QFile>
 #include <QStandardPaths>
-
-using KWallet::Wallet;
 
 namespace
 {
 
 const QLatin1String ConfigName("nasmountrc");
 const QLatin1String SharesGroup("Shares");
-const QLatin1String WalletFolder("nasmount");
-
-Wallet *openWallet()
-{
-    // Synchronous open: this runs off the GUI thread (Session::MountActions
-    // runs it via QtConcurrent), and there is nothing useful to do until the
-    // wallet is available either way.
-    return Wallet::openWallet(Wallet::NetworkWallet(), 0, Wallet::Synchronous);
-}
 
 /** Reads one share group's fields, whatever is present. Does not decide
  *  corrupt/exists -- the caller does, since "exists" also depends on whether
@@ -39,11 +27,6 @@ Store::Share readShareFields(const KConfigGroup &g, const QString &id)
     s.unc = g.readEntry("Unc", QString());
     s.username = g.readEntry("Username", QString());
     s.domain = g.readEntry("Domain", QString());
-    s.reconnect = g.readEntry("Reconnect", false);
-    s.mode = (g.readEntry("Mode", QStringLiteral("session")) == QStringLiteral("system"))
-        ? UnitValue::CredentialMode::System
-        : UnitValue::CredentialMode::Session;
-    s.rememberPassword = g.readEntry("RememberPassword", false);
     return s;
 }
 
@@ -53,10 +36,6 @@ void writeShareFields(KConfigGroup &g, const Store::Share &share)
     g.writeEntry("Unc", share.unc);
     g.writeEntry("Username", share.username);
     g.writeEntry("Domain", share.domain);
-    g.writeEntry("Reconnect", share.reconnect);
-    g.writeEntry("Mode", share.mode == UnitValue::CredentialMode::System ? QStringLiteral("system")
-                                                                         : QStringLiteral("session"));
-    g.writeEntry("RememberPassword", share.rememberPassword);
 }
 
 Store::Snapshot readSnapshot(const KConfigGroup &root, const QString &id)
@@ -141,12 +120,9 @@ CommitResult commitShare(const Share &share, quint64 expectedGeneration, QString
 
 bool removeShare(const QString &id)
 {
-    // Wallet first, config group second (plan §13.3): a crash between the
-    // two then leaves, at worst, a visible orphaned config record with no
-    // password -- never an unindexed wallet secret nothing points at.
-    if (!removePassword(id)) {
-        return false;
-    }
+    // No secret to revoke first any more: the share's credential is a
+    // root-owned file the helper removes when it undefines the definition,
+    // so this only clears the local convenience record.
     auto config = KSharedConfig::openConfig(ConfigName);
     config->reparseConfiguration();
     KConfigGroup root = config->group(SharesGroup);
@@ -159,83 +135,8 @@ bool removeShare(const QString &id)
     return true;
 }
 
-bool walletIsOpen()
-{
-    return Wallet::isOpen(Wallet::NetworkWallet());
-}
-
-bool readPassword(const QString &id, QString *password, bool onlyIfUnlocked)
-{
-    if (id.isEmpty()) {
-        return false;
-    }
-    // openWallet() pops an unlock dialog if the wallet is locked. The
-    // supervisor's unattended arming at sign-in must not do that; it checks
-    // onlyIfUnlocked and skips rather than blocking on a prompt (plan §7.1).
-    if (onlyIfUnlocked && !walletIsOpen()) {
-        return false;
-    }
-    std::unique_ptr<Wallet> wallet(openWallet());
-    if (!wallet || !wallet->isOpen()) {
-        return false;
-    }
-    if (!wallet->hasFolder(WalletFolder) || !wallet->setFolder(WalletFolder)) {
-        return false;
-    }
-    return wallet->readPassword(id, *password) == 0;
-}
-
-bool writePassword(const QString &id, const QString &password)
-{
-    if (id.isEmpty()) {
-        return false;
-    }
-    std::unique_ptr<Wallet> wallet(openWallet());
-    if (!wallet || !wallet->isOpen()) {
-        return false;
-    }
-    if (!wallet->hasFolder(WalletFolder) && !wallet->createFolder(WalletFolder)) {
-        return false;
-    }
-    if (!wallet->setFolder(WalletFolder)) {
-        return false;
-    }
-    return wallet->writePassword(id, password) == 0;
-}
-
-bool removePassword(const QString &id)
-{
-    if (id.isEmpty()) {
-        return true;
-    }
-    std::unique_ptr<Wallet> wallet(openWallet());
-    if (!wallet || !wallet->isOpen()) {
-        // The caller cannot prove whether this id has an entry while the
-        // wallet is unavailable. Keep the config record as the index to any
-        // possible secret and let the user retry after unlocking the wallet.
-        return false;
-    }
-    if (!wallet->hasFolder(WalletFolder)) {
-        return true;
-    }
-    if (!wallet->setFolder(WalletFolder)) {
-        return false;
-    }
-    return wallet->removeEntry(id) == 0;
-}
-
 bool purgeApplicationData(QString *error)
 {
-    std::unique_ptr<Wallet> wallet(openWallet());
-    if (!wallet || !wallet->isOpen()) {
-        *error = QStringLiteral("KWallet is unavailable or was not unlocked");
-        return false;
-    }
-    if (wallet->hasFolder(WalletFolder) && !wallet->removeFolder(WalletFolder)) {
-        *error = QStringLiteral("could not remove the nasmount KWallet folder");
-        return false;
-    }
-
     const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     if (configDir.isEmpty()) {
         *error = QStringLiteral("the user configuration directory is unavailable");

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Builds and installs nasmount: the Dolphin service menu, the kcm_nasmount
-# System Settings module, and the session supervisor.
+# System Settings module, and the boot coordinator.
 #
 # Run WITHOUT sudo. The build happens as you; only `cmake --install` elevates.
 #
@@ -43,13 +43,14 @@ cmake --build "$BUILD" -j"$(nproc)"
 echo "Running tests..."
 for t in unitspec_test unitvalue_test verify_test helperinvoke_test store_test \
          mountactions_test mountmodel_test durablefs_test inventory_test operations_test \
-         arming_test credentialstore_test cleanupvalidation_test; do
+         arming_test credentialstore_test cleanupvalidation_test smburl_test; do
     "$BUILD/bin/$t" || {
         echo "ERROR: $t failed — refusing to install." >&2
         exit 1
     }
 done
 bash "$SRC/tests/removed_api_gates.sh"
+bash "$SRC/tests/qml_invokable_gate.sh"
 
 echo "Installing (authentication required)..."
 sudo cmake --install "$BUILD"
@@ -58,10 +59,6 @@ echo
 echo "Installed:"
 sed 's/^/  /' "$BUILD/install_manifest.txt"
 
-echo
-echo "Enabling the session supervisor (arms shares at sign-in, disarms at logout)..."
-systemctl --user daemon-reload
-systemctl --user enable --now nasmount-session.service
 
 echo
 echo "Enabling the boot coordinator (arms System-mode shares at boot)..."
@@ -73,8 +70,7 @@ echo "Refreshing Dolphin's service menu cache and System Settings' KCM cache..."
 kbuildsycoca6 --noincremental 2>/dev/null || true
 
 echo
-echo "Done. Fully quit Dolphin so it re-reads the service menu:"
-echo "    killall dolphin && dolphin"
+echo "Done. Restart Dolpin and System settings to apply KDE mount"
 echo
 echo "Then type smb://<your-nas>/ in the location bar, right-click a share"
 echo "and choose 'Mount as Network Drive…' — or open System Settings →"

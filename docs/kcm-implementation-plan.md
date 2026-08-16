@@ -1,5 +1,14 @@
 # KCM implementation — current architecture
 
+> **Partly superseded.** This document predates the removal of the
+> sign-in-scoped (Session) credential mode. Anything below describing two
+> modes, KWallet persistence, a per-share `reconnect` switch, mode-routed
+> helper actions, or the runtime verbs (Connect / Mount now / Unmount now /
+> Disarm) describes a lifecycle that no longer exists — see
+> [`credential-modes-design.md`](credential-modes-design.md) §1 and §1.1 for
+> what replaced it and why. The privilege, locking and validation rules it
+> states are still current.
+
 `kcm_nasmount` is an immediate-action System Settings module for CIFS mounts
 backed by generated static systemd mount and automount units. It shares the
 same session library and privileged helper as the Dolphin service-menu dialog.

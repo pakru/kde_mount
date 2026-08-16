@@ -53,7 +53,8 @@ std::unique_ptr<RootLock> RootLock::acquire(QString *error)
         *error = err;
         return nullptr;
     }
-    const int dirFd = DurableFs::createAndVerifyDir(runFd, QStringLiteral("nasmount"), &err);
+    const int dirFd =
+        DurableFs::createAndVerifyDir(runFd, QStringLiteral("nasmount"), DurableFs::ArtifactKind::Directory, &err);
     ::close(runFd);
     if (dirFd < 0) {
         *error = err;

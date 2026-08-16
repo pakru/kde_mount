@@ -65,7 +65,6 @@ int main(int argc, char **argv)
         input.mountPoint = QStringLiteral("/mnt/nasmount-operations-test");
         input.unitName = QStringLiteral("mnt-nasmount\\x2doperations\\x2dtest");
         input.username = QStringLiteral("alice");
-        input.mode = UnitValue::CredentialMode::Session;
 
         const auto result = Root::Operations::define(input);
         check(QStringLiteral("Session define() does not report ok without root"), !result.ok);
@@ -81,7 +80,6 @@ int main(int argc, char **argv)
         input.username = QStringLiteral("alice");
         input.domain = QStringLiteral("EXAMPLE");
         input.password = QStringLiteral("hunter2");
-        input.mode = UnitValue::CredentialMode::System;
 
         const auto result = Root::Operations::define(input);
         check(QStringLiteral("System define() does not report ok without root"), !result.ok);
@@ -94,7 +92,6 @@ int main(int argc, char **argv)
         input.ownerUid = ::getuid();
         input.ownerGid = ::getgid();
         input.shareId = QStringLiteral("0123456789abcdef0123456789abcdef");
-        input.mode = UnitValue::CredentialMode::Session;
         input.authentication = UnitValue::AuthenticationKind::Credentials;
         input.mountPoint = QStringLiteral("/mnt/nasmount-operations-test");
         input.unitName = QStringLiteral("mnt-nasmount\\x2doperations\\x2dtest");

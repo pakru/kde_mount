@@ -1,29 +1,53 @@
-# Design — Session and System network mounts
+# Design — network mounts
 
 This is the current design for nasmount. It describes a clean installation;
 there is no migration or compatibility behavior.
 
-The implementation intentionally supports a small lifecycle: Add, connect or
-mount where applicable, unmount or disarm, and Delete. Changing a share's UNC,
-mount point, credentials, authentication kind, or mode is Delete followed by
-Add. Mount-point directories are never removed automatically.
+The implementation intentionally supports a small lifecycle: Add and Delete.
+A share is armed at boot and mounts on first access; there is no connect,
+arm, disarm, mount-now or unmount-now verb. Changing a share's UNC, mount
+point, credentials or authentication kind is Delete followed by Add. Mount-point directories are never removed automatically.
 
-## 1. Credential modes
+## 1. One lifecycle
 
-Every share has one root-owned static `.mount`/`.automount` pair and one mode:
+Every share has one root-owned static `.mount`/`.automount` pair and one
+lifecycle: an authenticated share's credential is a persistent root-owned
+`0600` file under `/etc/nasmount`, and `nasmount-boot.service` arms the share
+at boot, before login. It then mounts on first access and releases on the idle
+timeout, with the trigger staying armed.
 
-- **Session** — an authenticated share's credential exists under `/run` only
-  while the share is armed. KWallet may retain the user's optional saved copy.
-  The session supervisor can arm it after login and disarms it at logout.
-- **System** — an authenticated share's credential is an explicit persistent
-  root-owned `0600` file under `/etc/nasmount`. A system service arms the share
-  at boot, before login.
+There is deliberately no per-share choice about any of that — no mode, no
+"arm at sign-in" switch. Asking for a share to be mounted *is* asking for it
+to be there after a reboot.
 
-Guest shares are valid in both modes and never have a credential file.
+Guest shares are valid and never have a credential file.
 
-System mode is a manageability feature, not encryption. Root and anyone who can
-read the disk offline can read its credential. Full-disk encryption remains the
+This is a manageability feature, not encryption. Root and anyone who can read
+the disk offline can read the credential. Full-disk encryption remains the
 appropriate protection against offline access.
+
+### 1.1 The removed sign-in-scoped mode
+
+There used to be a second mode: an authenticated share whose credential lived
+under `/run` only while armed, with KWallet holding the user's saved copy, and
+a per-user supervisor (`nasmount-session.service`) arming it after login. It
+was removed entirely, along with the supervisor binary, the KWallet
+integration, and the passwordless `define`/`undefine`/`arm`/`disarm` polkit
+tier that existed to avoid an authentication prompt on every login.
+
+It is worth recording *why*, because the tradeoff it made was reasonable: it
+kept the password out of any on-disk file. What it could not do is survive a
+reboot unattended — it cannot arm before a user logs in and unlocks a wallet,
+by construction. It also depended on the desktop's wallet being reachable,
+which on a KDE system with a competing Secret Service provider is not
+something this tool can guarantee.
+
+`UnitValue::CredentialMode` still carries a `Session` value and still parses
+the `session` marker, but nothing creates one and no action routes on it. That
+residue is not a compatibility guarantee — this project is clean-install only
+and assumes no existing deployment — it is simply not yet removed from
+`nasmount-root`'s API surface (`Operations::DefineInput`, `Arming::arm`/
+`disarm`). Removing it is a wanted cleanup, not a behaviour change.
 
 ## 2. Scope and non-goals
 
@@ -42,13 +66,18 @@ For a share with stable ID `<id>` and escaped unit name `<unit>`:
 ```text
 /etc/systemd/system/<unit>.mount
 /etc/systemd/system/<unit>.automount
-/run/nasmount/<id>.cred                 Session authenticated, while armed
-/etc/nasmount/<id>.cred                 System authenticated, persistent
-/run/nasmount/automount-ids/<unit>      active-trigger identity
+/etc/nasmount/<id>.cred                 authenticated share, persistent
+/run/nasmount-ids/<unit>                active-trigger identity (0644, world-readable)
 ```
 
-Both units are static and have no `[Install]` section. Only
-`nasmount-boot.service` and `nasmount-session.service` are enabled.
+`/run/nasmount-ids` is deliberately a sibling of `/run/nasmount`, not a
+subdirectory of it: `/run/nasmount` stays `0700` to protect the credential
+files directly inside it, while `/run/nasmount-ids` is `0755` so any local
+process can verify a recorded instance id without needing to traverse the
+credential directory to reach it.
+
+Both units are static and have no `[Install]` section: they are started by
+`nasmount-boot.service`, the only enabled unit this project installs.
 
 The `.automount` creates an autofs trigger. The first access starts the CIFS
 `.mount`; `TimeoutIdleSec=` later releases the CIFS mount while leaving the
@@ -92,8 +121,8 @@ is exact because nasmount records `STATX_MNT_ID_UNIQUE` immediately after start.
 ### 5.1 Stable ID
 
 The privileged helper generates a globally unique 32-character lowercase
-hexadecimal ID. The ID is used by unit markers, credential filenames, Store,
-and KWallet. It is never supplied by the client for a new definition.
+hexadecimal ID. The ID is used by unit markers, credential filenames and
+Store. It is never supplied by the client for a new definition.
 
 ### 5.2 Marker
 
@@ -117,8 +146,8 @@ uid=<caller>,gid=<caller>,nounix,iocharset=utf8,file_mode=0600,dir_mode=0700
 
 ### 6.2 Static activation
 
-Share units are never enabled. Session arming starts a static automount after
-login; System arming starts it immediately after Add and at boot.
+Share units are never enabled. Arming starts the static automount immediately
+after Add, and again at boot.
 
 ### 6.3 Boot coordinator
 
@@ -153,20 +182,20 @@ complete definition and credential remain so refresh can show the unsafe state.
 
 ### 7.1 Actions
 
-Session actions are available only to an active local session. System mutations
-and full purge require administrator authentication.
+Every mutation requires administrator authentication (`auth_admin`); the
+read-only inventory does not. There is no passwordless mutation tier -- see
+the header of `io.github.pakru.nasmount.actions` for why one used to exist and
+why its justification is gone.
 
 ```text
-define / definesystem
-undefine / undefinesystem
-arm / disarm
-mountnow / unmountnow
+definesystem
+undefinesystem
 inventory
 purge
 ```
 
-Mode-specific helper entry points hard-code their target mode. Existing-share
-actions re-read the marker and reject the wrong action tier.
+Existing-share actions re-read the marker for owner, ID and authentication
+kind rather than trusting any caller-supplied value.
 
 ### 7.1.2 Marker authority
 
@@ -193,10 +222,11 @@ removal. An unmatched Store row's derived unit path is inspected before it is
 called Store-only; unsafe or foreign unit files also require administrator
 guidance.
 
-### 7.4.6 Mode-specific UI
+### 7.4.6 Row actions
 
-Session rows may expose Connect, Mount now, Unmount now, and Disarm. System rows
-are boot-managed and expose no passwordless manual arming action.
+Every row is boot-managed and exposes no manual arming action. The only verbs
+are Delete (a share with a local record) and Remove (an owned definition with
+no record); a row needing administrator repair offers neither.
 
 ## 8. Credentials
 
@@ -237,12 +267,11 @@ credential, both unit halves, automount ID, and finally reloads systemd.
 Missing artifacts are idempotent after ownership is established. Busy,
 mismatched, or indeterminate runtime leaves the definition untouched.
 
-### 9.5 Arm and disarm
+### 9.5 Arming
 
-Session arm performs runtime precheck, credential write when needed, path
-validation, start, and ID recording. Disarm safely stops first, then removes
-runtime ID and Session credential. System arming validates the persistent
-credential but never rewrites it.
+Arming performs a runtime precheck, path validation, start, and ID recording.
+It validates the persistent credential but never writes or rewrites it: the
+credential is created once, by Add, before the unit is ever started.
 
 ## 10. Local paths and credential storage
 
@@ -268,9 +297,9 @@ credential health, and unclaimed live CIFS mounts. It classifies rows as:
 - `Broken`, `Busy`, or read-only `Foreign`.
 
 Unsafe definition/runtime state takes precedence over credentials. A missing
-System credential is always an error. A missing Session credential is an error
-only while its trigger or matching mount is active. Guest rows ignore
-credential health.
+credential is always an error, since it is persistent and expected present
+whether or not the trigger is currently armed. Guest rows ignore credential
+health.
 
 Removal actionability comes only from model booleans:
 

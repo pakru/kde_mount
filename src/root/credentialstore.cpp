@@ -17,17 +17,17 @@ namespace Root::CredentialStore
 namespace
 {
 
-/** Opens (creating as needed) the root-owned credential directory for
- *  `mode`: /run/nasmount or /etc/nasmount. */
-int openCredentialDir(UnitValue::CredentialMode mode, QString *error)
+/** Opens (creating as needed) the root-owned credential directory,
+ *  /etc/nasmount. A share's credential is persistent; there is no second
+ *  location. */
+int openCredentialDir(QString *error)
 {
-    const QString systemRoot = (mode == UnitValue::CredentialMode::System) ? QStringLiteral("/etc")
-                                                                           : QStringLiteral("/run");
-    const int rootFd = DurableFs::openSystemRoot(systemRoot, error);
+    const int rootFd = DurableFs::openSystemRoot(QStringLiteral("/etc"), error);
     if (rootFd < 0) {
         return -1;
     }
-    const int dirFd = DurableFs::createAndVerifyDir(rootFd, QStringLiteral("nasmount"), error);
+    const int dirFd =
+        DurableFs::createAndVerifyDir(rootFd, QStringLiteral("nasmount"), DurableFs::ArtifactKind::Directory, error);
     ::close(rootFd);
     return dirFd;
 }
@@ -65,7 +65,7 @@ bool validateFields(const QString &username, const QString &domain, const QStrin
 
 } // namespace
 
-bool write(UnitValue::CredentialMode mode, const QString &id, const QString &username, const QString &domain,
+bool write(const QString &id, const QString &username, const QString &domain,
           const QString &password, QString *error)
 {
     if (!UnitValue::isValidShareId(id)) {
@@ -89,7 +89,7 @@ bool write(UnitValue::CredentialMode mode, const QString &id, const QString &use
         return false;
     }
 
-    const int dirFd = openCredentialDir(mode, error);
+    const int dirFd = openCredentialDir(error);
     if (dirFd < 0) {
         return false;
     }
@@ -99,13 +99,13 @@ bool write(UnitValue::CredentialMode mode, const QString &id, const QString &use
     return ok;
 }
 
-bool remove(UnitValue::CredentialMode mode, const QString &id, bool allowMissing, QString *error)
+bool remove(const QString &id, bool allowMissing, QString *error)
 {
     if (!UnitValue::isValidShareId(id)) {
         *error = QStringLiteral("invalid share id");
         return false;
     }
-    const int dirFd = openCredentialDir(mode, error);
+    const int dirFd = openCredentialDir(error);
     if (dirFd < 0) {
         return false;
     }
@@ -114,13 +114,13 @@ bool remove(UnitValue::CredentialMode mode, const QString &id, bool allowMissing
     return ok;
 }
 
-bool healthy(UnitValue::CredentialMode mode, const QString &id, QString *error)
+bool healthy(const QString &id, QString *error)
 {
     if (!UnitValue::isValidShareId(id)) {
         *error = QStringLiteral("invalid share id");
         return false;
     }
-    const int dirFd = openCredentialDir(mode, error);
+    const int dirFd = openCredentialDir(error);
     if (dirFd < 0) {
         return false;
     }
@@ -144,13 +144,13 @@ bool healthy(UnitValue::CredentialMode mode, const QString &id, QString *error)
     return ok;
 }
 
-bool assertAbsent(UnitValue::CredentialMode mode, const QString &id, QString *error)
+bool assertAbsent(const QString &id, QString *error)
 {
     if (!UnitValue::isValidShareId(id)) {
         *error = QStringLiteral("invalid share id");
         return false;
     }
-    const int dirFd = openCredentialDir(mode, error);
+    const int dirFd = openCredentialDir(error);
     if (dirFd < 0) {
         return false;
     }

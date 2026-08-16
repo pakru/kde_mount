@@ -95,91 +95,6 @@ StopPrecheck evaluateStopPrecheck(const Verify::RuntimeSnapshot &snap, QString *
     return StopPrecheck::ShouldStop;
 }
 
-bool arm(const ArmRequest &req, QString *error)
-{
-    const Verify::RuntimeSnapshot before = Verify::inspectRuntime(req.unitName, req.mountPoint, req.what);
-    QString precheckError;
-    if (evaluateArmPrecheck(before, &precheckError) != ArmPrecheck::ReadyToArm) {
-        *error = precheckError.isEmpty() ? QStringLiteral("share is already armed or mounted") : precheckError;
-        return false;
-    }
-
-    const bool hasCredential = (req.authentication == UnitValue::AuthenticationKind::Credentials);
-    if (hasCredential) {
-        if (!CredentialStore::write(req.mode, req.shareId, req.username, req.domain, req.password, error)) {
-            return false;
-        }
-    }
-
-    const QString automountUnit = req.unitName + QStringLiteral(".automount");
-    QString startError;
-    if (!SystemdOps::start(automountUnit, &startError)) {
-        *error = startError;
-        bool cleanupSafe = true;
-        const Verify::RuntimeSnapshot after = Verify::inspectRuntime(req.unitName, req.mountPoint, req.what);
-        if (after.automount == Verify::AutomountState::Active && after.mount == Verify::MountState::Absent) {
-            const uint64_t observedId = Verify::uniqueMountId(req.mountPoint);
-            QString stopError;
-            cleanupSafe = stopStartedAutomount(automountUnit, req.unitName, req.mountPoint, observedId, &stopError);
-            if (!stopError.isEmpty()) {
-                *error += QStringLiteral("; compensation failed (%1)").arg(stopError);
-            }
-        } else if (after.automount != Verify::AutomountState::Inactive
-                   || after.mount != Verify::MountState::Absent) {
-            cleanupSafe = false;
-            *error += QStringLiteral("; runtime after failed start could not be proven inactive");
-        }
-        if (hasCredential && cleanupSafe) {
-            QString credError;
-            if (!CredentialStore::remove(req.mode, req.shareId, /*allowMissing=*/true, &credError)) {
-                *error += QStringLiteral("; credential cleanup failed (%1)").arg(credError);
-            }
-        }
-        return false;
-    }
-
-    const uint64_t id = Verify::uniqueMountId(req.mountPoint);
-    QString idError;
-    if (id == 0 || !RuntimeFiles::writeAutomountId(req.unitName, id, &idError)) {
-        *error = idError.isEmpty() ? QStringLiteral("kernel does not support recording the instance id") : idError;
-        QString stopError;
-        const bool cleanupSafe = stopStartedAutomount(automountUnit, req.unitName, req.mountPoint, id, &stopError);
-        if (!stopError.isEmpty()) {
-            *error += QStringLiteral("; compensation failed (%1)").arg(stopError);
-        }
-        if (hasCredential && cleanupSafe) {
-            QString credError;
-            if (!CredentialStore::remove(req.mode, req.shareId, /*allowMissing=*/true, &credError)) {
-                *error += QStringLiteral("; credential cleanup failed (%1)").arg(credError);
-            }
-        }
-        return false;
-    }
-
-    return true;
-}
-
-bool disarm(const DisarmRequest &req, QString *error)
-{
-    QString stopError;
-    const StopResult result = safeStop(req.unitName, req.mountPoint, req.what, &stopError);
-    if (result == StopResult::Busy || result == StopResult::CorrelationMismatch
-        || result == StopResult::Indeterminate) {
-        *error = stopError;
-        return false;
-    }
-
-    if (!RuntimeFiles::removeAutomountId(req.unitName, error)) {
-        return false;
-    }
-    QString credError;
-    if (!CredentialStore::remove(req.mode, req.shareId, /*allowMissing=*/true, &credError)) {
-        *error = credError;
-        return false;
-    }
-    return true;
-}
-
 ArmPrecheck evaluateArmPrecheck(const Verify::RuntimeSnapshot &snapshot, QString *error)
 {
     if (snapshot.mount == Verify::MountState::Indeterminate
@@ -241,10 +156,10 @@ ArmShareResult armShare(const ArmShareRequest &req)
     // before systemd was reloaded).
     QString credError;
     if (req.authentication == UnitValue::AuthenticationKind::Credentials) {
-        if (!CredentialStore::healthy(req.mode, req.shareId, &credError)) {
+        if (!CredentialStore::healthy(req.shareId, &credError)) {
             return fail(credError.isEmpty() ? QStringLiteral("credential is missing or unhealthy") : credError);
         }
-    } else if (!CredentialStore::assertAbsent(req.mode, req.shareId, &credError)) {
+    } else if (!CredentialStore::assertAbsent(req.shareId, &credError)) {
         return fail(credError.isEmpty()
                         ? QStringLiteral("internal error: unexpected credential artifact for a guest share")
                         : credError);

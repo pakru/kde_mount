@@ -34,11 +34,24 @@ enum class FileKind { Regular, Directory };
  * The fixed artifact kinds this library ever writes, each with exactly one
  * root-owned mode (plan §2.2.8):
  *
- *   Directory     — nasmount's own root/subdirectories: 0700
- *   UnitFile      — generated .mount/.automount unit files: 0644
- *   SensitiveFile — credentials and runtime IDs: 0600
+ *   Directory       — nasmount's own private root/subdirectories, holding
+ *                     SensitiveFile content (credentials, the root lock):
+ *                     0700
+ *   PublicDirectory — a root-owned directory whose entries are meant to be
+ *                     openable by any local process, holding only
+ *                     PublicRecord content: 0755
+ *   UnitFile        — generated .mount/.automount unit files: 0644
+ *   SensitiveFile   — credentials and the root lock: 0600
+ *   PublicRecord    — non-secret runtime records an unprivileged verifier
+ *                     must be able to read back (e.g. a recorded automount
+ *                     instance id — see runtimefiles.h): 0644
+ *
+ * A Directory never holds a PublicRecord and a PublicDirectory never holds a
+ * SensitiveFile — keeping the two trees separate makes "is anything in here
+ * readable by a non-owner" a property of which root a file lives under,
+ * never a per-file exception inside a tree that is otherwise private.
  */
-enum class ArtifactKind { Directory, UnitFile, SensitiveFile };
+enum class ArtifactKind { Directory, PublicDirectory, UnitFile, SensitiveFile, PublicRecord };
 
 mode_t modeFor(ArtifactKind kind);
 
@@ -66,22 +79,23 @@ int openSystemRoot(const QString &absolutePath, QString *error);
  * Opens an existing single-component directory name below the already
  * verified `parentFd` (from openSystemRoot() or a previous call here) with
  * O_DIRECTORY|O_NOFOLLOW and verifies it on the descriptor: root-owned, a
- * regular directory, mode exactly 0700. Fails closed — returns -1 — on a
- * symlink, wrong type, wrong owner, wrong mode, or ENOENT; the caller
- * distinguishes "missing" from "unsafe" via `error` being empty only in the
- * ENOENT case (no directory-listing side channel is needed here, so both
- * fail the same way operationally).
+ * regular directory, mode exactly `modeFor(dirKind)` (`Directory` or
+ * `PublicDirectory` — passing a file kind here is a caller bug). Fails
+ * closed — returns -1 — on a symlink, wrong type, wrong owner, wrong mode,
+ * or ENOENT; the caller distinguishes "missing" from "unsafe" via `error`
+ * being empty only in the ENOENT case (no directory-listing side channel is
+ * needed here, so both fail the same way operationally).
  */
-int openVerifiedDir(int parentFd, const QString &name, QString *error);
+int openVerifiedDir(int parentFd, const QString &name, ArtifactKind dirKind, QString *error);
 
 /**
  * Like openVerifiedDir(), but creates the directory (mkdirat, root-owned,
- * 0700) first if the name is entirely absent. Never "repairs" an existing
- * object that fails verification — that always fails closed exactly like
- * openVerifiedDir(), never silently chowns/chmods a symlink or a foreign
- * file into shape.
+ * mode `modeFor(dirKind)`) first if the name is entirely absent. Never
+ * "repairs" an existing object that fails verification — that always fails
+ * closed exactly like openVerifiedDir(), never silently chowns/chmods a
+ * symlink or a foreign file into shape.
  */
-int createAndVerifyDir(int parentFd, const QString &name, QString *error);
+int createAndVerifyDir(int parentFd, const QString &name, ArtifactKind dirKind, QString *error);
 
 /**
  * Reads an existing regular file below `dirFd`, opened O_NOFOLLOW and
@@ -115,12 +129,16 @@ bool durableUnlink(int dirFd, const QString &name, bool allowMissing, QString *e
 
 /**
  * Recursively removes every entry below `parentFd`/`name` (regular files
- * only — this refuses to recurse into a further subdirectory, which nothing
- * this project ever creates below its own root does), fsyncing the
- * directory after its contents are gone, then removes `name` itself from
+ * only, each required to match `modeFor(entryKind)` exactly — this refuses
+ * to recurse into a further subdirectory, which nothing this project ever
+ * creates below its own root does — and refuses a symlink, device, foreign
+ * owner, or drifted mode instead of turning a cleanup operation into an
+ * unreviewed deletion primitive), fsyncing the directory after its contents
+ * are gone, then removes `name` itself — verified as `dirKind` — from
  * `parentFd` and fsyncs `parentFd`. Used for full uninstall purge (design
  * §14/plan phase 8).
  */
-bool durableRemoveTree(int parentFd, const QString &name, QString *error);
+bool durableRemoveTree(int parentFd, const QString &name, ArtifactKind dirKind, ArtifactKind entryKind,
+                       QString *error);
 
 } // namespace Root::DurableFs

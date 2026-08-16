@@ -230,13 +230,12 @@ int main(int argc, char **argv)
 
     out << "=== pairScannedHalves: pure grouping/pairing/collision logic ===" << Qt::endl;
     {
-        auto makeMarker = [](const QString &id, UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session,
+        auto makeMarker = [](const QString &id,
                              UnitValue::AuthenticationKind auth = UnitValue::AuthenticationKind::Credentials) {
             UnitValue::Marker m;
             m.ownerUid = ::getuid();
             m.ownerGid = ::getgid();
             m.id = id;
-            m.mode = mode;
             m.authentication = auth;
             return m;
         };

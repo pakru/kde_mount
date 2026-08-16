@@ -53,6 +53,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    QTextStream(stdout) << purge.message << "; removed KWallet folder and configuration\n";
+    QTextStream(stdout) << purge.message << "; removed local configuration\n";
     return 0;
 }

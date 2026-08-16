@@ -50,14 +50,14 @@ boundary**, not a style preference:
 | Library | Contents | Linked into |
 |---------|----------|-------------|
 | `nasmount-core` | validation, unit-value encoding, read-only state model (`src/core`) | everything, helper included |
-| `nasmount-session` | KConfig store, KWallet, per-user lock, KAuth call wrapper, async operation controller, display model (`src/session`) | dialog, KCM, supervisor, cleanup — **never the helper** |
+| `nasmount-session` | KConfig store, per-user lock, KAuth call wrapper, async operation controller, display model (`src/session`) | dialog, KCM, cleanup — **never the helper** |
 | `nasmount-root` | durable fd-based filesystem ops, root lock, systemd execution, credential/runtime stores (`src/root`) | `nasmount-helper`, `nasmount-boot` **only** |
 
 - Everything is **STATIC** on purpose: the privileged helper must not depend on
   a `.so` an unprivileged user could replace. Don't convert these to shared.
 - `nasmount_assert_no_root_link()` in [`CMakeLists.txt`](CMakeLists.txt#L166)
   fails the configure step if `nasmount-root` ever reaches
-  `nasmount-session`, the dialog, the supervisor, the cleanup tool, or the KCM.
+  `nasmount-session`, the dialog, the cleanup tool, or the KCM.
   Structural placement is the real defence; that check catches accidents.
 - The helper ([`src/helper/helper.cpp`](src/helper/helper.cpp)) is deliberately
   thin: caller validation, typed argument decoding, root-lock acquisition,
@@ -68,9 +68,17 @@ boundary**, not a style preference:
   done in the dialog or KCM is UX feedback and is re-done in the helper.
 
 Binaries: `nasmount-helper` (root, D-Bus activated), `nasmount-boot` (root,
-started by `nasmount-boot.service`), `nasmount-dialog` (service menu),
-`nasmount-supervisor` (arm/disarm at sign-in/logout), `nasmount-cleanup`
-(authenticated uninstall), `kcm_nasmount` (QML KCM, [`src/kcm/ui/`](src/kcm/ui/)).
+started by `nasmount-boot.service`), `nasmount-dialog` (service menu, QML),
+`nasmount-cleanup` (authenticated uninstall), `kcm_nasmount` (QML KCM,
+[`src/kcm/ui/`](src/kcm/ui/)).
+
+Both front ends render the same form,
+[`src/kcm/ui/ShareForm.qml`](src/kcm/ui/ShareForm.qml) — the KCM picks it up
+by directory glob, `nasmount-dialog` embeds it via
+[`src/dialog/dialog.qrc`](src/dialog/dialog.qrc). It must stay host-agnostic:
+no `kcm`/`backend` reference inside it, everything injected as a property.
+A single host reference there silently makes it usable by one front end only,
+which is how the two drifted apart before.
 
 ## Conventions
 
@@ -89,9 +97,14 @@ started by `nasmount-boot.service`), `nasmount-dialog` (service menu),
 - No in-place Edit exists anywhere. Changing a share's UNC, mount point,
   credentials, authentication or mode is Delete then Add. Don't reintroduce an
   edit path.
-- Mode (Session vs System) for an *existing* definition is always re-derived
-  from the validated unit marker via `Verify::inspectDefinition()` — never from
-  the Store and never from a caller-supplied flag.
+- There is one lifecycle: every share is defined with a root-owned `/etc`
+  credential and armed at boot. There is no Session/System choice, no
+  KWallet, no per-share reconnect switch, and no runtime verb
+  (connect/arm/disarm/mount-now). Don't reintroduce one without reading
+  design §1.1, which records why the sign-in-scoped mode was removed.
+- Properties of an *existing* definition are still always re-derived from the
+  validated unit marker via `Verify::inspectDefinition()` — never from the
+  Store and never from a caller-supplied flag.
 - Every client mutation runs on a worker thread under `Session::UserLock`; every
   privileged mutation runs under `Root::RootLock`. KAuth and KWallet calls are
   unbounded waits and must never touch the GUI thread.
@@ -132,7 +145,8 @@ locally and must be validated in a disposable VM.
 - Generation and validation of unit bodies share the same fixed-value functions,
   so any functional deviation becomes `Tampered`. If you change generation,
   change the shared function — never the two sides separately.
-- The KAuth policy is passwordless (`allow_active=yes`) by design; the threat
+- Every KAuth mutation is `auth_admin` by design (there is no passwordless
+  tier left — see the .actions header for why the old one existed); the threat
   model in the README explains what that rests on. Adding actions means editing
   [`io.github.pakru.nasmount.actions`](io.github.pakru.nasmount.actions).
 - Requires Linux 6.8+ (`STATX_MNT_ID_UNIQUE`), Plasma 6 / KF6, `cifs-utils`.

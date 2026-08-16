@@ -51,17 +51,14 @@ bool readUnitFile(int dirFd, const QString &fileName, QByteArray *content, QStri
 }
 
 /** Whether any managed marker anywhere, or a credential file in either
- *  mode's namespace, already claims `id` (design §5.1: "generation retries
+ *  the credential namespace, already claims `id` (design §5.1: "generation retries
  *  until the value is absent from every managed unit marker and credential
  *  namespace"). Deliberately global, not scoped to one uid -- ids must be
  *  unique across every user's shares. */
 bool shareIdInUse(const QString &id)
 {
     QString ignored;
-    if (!CredentialStore::assertAbsent(UnitValue::CredentialMode::Session, id, &ignored)) {
-        return true;
-    }
-    if (!CredentialStore::assertAbsent(UnitValue::CredentialMode::System, id, &ignored)) {
+    if (!CredentialStore::assertAbsent(id, &ignored)) {
         return true;
     }
     QDir dir(QStringLiteral("/etc/systemd/system"));
@@ -136,7 +133,7 @@ DefineOutput define(const DefineInput &input)
         bool mayRemoveUnits = true;
         if (credentialMayExist) {
             QString credError;
-            if (!CredentialStore::remove(UnitValue::CredentialMode::System, shareId, /*allowMissing=*/true,
+            if (!CredentialStore::remove(shareId, /*allowMissing=*/true,
                                          &credError)) {
                 out.error += QStringLiteral("; credential cleanup failed (%1); definition retained so the secret remains discoverable")
                                  .arg(credError);
@@ -194,7 +191,6 @@ DefineOutput define(const DefineInput &input)
     marker.ownerUid = input.ownerUid;
     marker.ownerGid = input.ownerGid;
     marker.id = shareId;
-    marker.mode = input.mode;
     marker.authentication = authentication;
 
     QString mountContent, automountContent;
@@ -222,23 +218,20 @@ DefineOutput define(const DefineInput &input)
     }
     ::close(sysFd);
 
-    if (input.mode == UnitValue::CredentialMode::System) {
-        if (authentication == UnitValue::AuthenticationKind::Credentials) {
-            QString credErr;
-            credentialMayExist = true;
-            if (!CredentialStore::write(UnitValue::CredentialMode::System, shareId, input.username, input.domain,
-                                        input.password, &credErr)) {
-                cleanup(credErr);
-                return out;
-            }
-        } else {
-            QString assertError;
-            if (!CredentialStore::assertAbsent(UnitValue::CredentialMode::System, shareId, &assertError)) {
-                cleanup(assertError.isEmpty()
-                            ? QStringLiteral("internal error: unexpected credential artifact for a guest share")
-                            : assertError);
-                return out;
-            }
+    if (authentication == UnitValue::AuthenticationKind::Credentials) {
+        QString credErr;
+        credentialMayExist = true;
+        if (!CredentialStore::write(shareId, input.username, input.domain, input.password, &credErr)) {
+            cleanup(credErr);
+            return out;
+        }
+    } else {
+        QString assertError;
+        if (!CredentialStore::assertAbsent(shareId, &assertError)) {
+            cleanup(assertError.isEmpty()
+                        ? QStringLiteral("internal error: unexpected credential artifact for a guest share")
+                        : assertError);
+            return out;
         }
     }
 
@@ -248,15 +241,13 @@ DefineOutput define(const DefineInput &input)
         return out;
     }
 
-    // A System definition arms immediately, as the last step (design §6.3a,
-    // plan §4.3). Session never arms here; its arm() is a separate, later
-    // action.
-    if (input.mode == UnitValue::CredentialMode::System) {
+    // A definition arms immediately, as the last step (design §6.3a, plan
+    // §4.3): Add either produces an armed share or reports why it could not.
+    {
         Arming::ArmShareRequest armReq;
         armReq.ownerUid = input.ownerUid;
         armReq.ownerGid = input.ownerGid;
         armReq.shareId = shareId;
-        armReq.mode = UnitValue::CredentialMode::System;
         armReq.authentication = authentication;
         armReq.plan = input.mountPlan;
         armReq.unitName = input.unitName;
@@ -300,7 +291,7 @@ RemovalOutput remove(const RemovalInput &input)
     }
 
     QString credError;
-    if (!CredentialStore::remove(input.mode, input.shareId, /*allowMissing=*/true, &credError)) {
+    if (!CredentialStore::remove(input.shareId, /*allowMissing=*/true, &credError)) {
         out.error = credError;
         return out; // every remaining step is idempotent; retry repeats this one
     }
@@ -389,7 +380,7 @@ PurgeOutput purge(uid_t ownerUid)
         }
         const Verify::DefinitionCheck def = Verify::inspectDefinition(paths, ownerUid, unit.mountPoint);
         if ((def.state != Verify::Definition::Pair && def.state != Verify::Definition::Partial)
-            || def.id != unit.id || def.ownerUid != ownerUid || def.ownerGid != unit.ownerGid || def.mode != unit.mode
+            || def.id != unit.id || def.ownerUid != ownerUid || def.ownerGid != unit.ownerGid
             || def.authentication != unit.authentication) {
             out.error = QStringLiteral("managed definition changed during purge validation");
             return out;
@@ -424,7 +415,7 @@ PurgeOutput purge(uid_t ownerUid)
             return out;
         }
         if (!RuntimeFiles::removeAutomountId(unit.paths.unitName, &out.error)
-            || !CredentialStore::remove(unit.definition.mode, unit.definition.id, /*allowMissing=*/true,
+            || !CredentialStore::remove(unit.definition.id, /*allowMissing=*/true,
                                         &out.error)) {
             ::close(sysFd);
             return out;
@@ -438,11 +429,15 @@ PurgeOutput purge(uid_t ownerUid)
 
     // Remove private roots last. durableRemoveTree() rejects symlinks,
     // directories at unexpected levels, foreign owners and drifted modes.
+    // /run/nasmount-ids is a sibling of /run/nasmount, not nested inside it
+    // (runtimefiles.h), so the two are independent, order-insensitive
+    // removals — neither call needs the other's directory open first.
     const int etcFd = DurableFs::openSystemRoot(QStringLiteral("/etc"), &out.error);
     if (etcFd < 0) {
         return out;
     }
-    if (!DurableFs::durableRemoveTree(etcFd, QStringLiteral("nasmount"), &out.error)) {
+    if (!DurableFs::durableRemoveTree(etcFd, QStringLiteral("nasmount"), DurableFs::ArtifactKind::Directory,
+                                      DurableFs::ArtifactKind::SensitiveFile, &out.error)) {
         ::close(etcFd);
         return out;
     }
@@ -452,21 +447,13 @@ PurgeOutput purge(uid_t ownerUid)
     if (runFd < 0) {
         return out;
     }
-    QString openError;
-    const int runNasmountFd = DurableFs::openVerifiedDir(runFd, QStringLiteral("nasmount"), &openError);
-    if (runNasmountFd >= 0) {
-        if (!DurableFs::durableRemoveTree(runNasmountFd, QStringLiteral("automount-ids"), &out.error)) {
-            ::close(runNasmountFd);
-            ::close(runFd);
-            return out;
-        }
-        ::close(runNasmountFd);
-    } else if (!openError.isEmpty()) {
+    if (!DurableFs::durableRemoveTree(runFd, QStringLiteral("nasmount-ids"), DurableFs::ArtifactKind::PublicDirectory,
+                                      DurableFs::ArtifactKind::PublicRecord, &out.error)) {
         ::close(runFd);
-        out.error = openError;
         return out;
     }
-    if (!DurableFs::durableRemoveTree(runFd, QStringLiteral("nasmount"), &out.error)) {
+    if (!DurableFs::durableRemoveTree(runFd, QStringLiteral("nasmount"), DurableFs::ArtifactKind::Directory,
+                                      DurableFs::ArtifactKind::SensitiveFile, &out.error)) {
         ::close(runFd);
         return out;
     }

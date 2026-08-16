@@ -40,7 +40,7 @@ int main(int argc, char **argv)
     {
         QString error;
         check(QStringLiteral("write() rejects invalid id"),
-              !Root::CredentialStore::write(UnitValue::CredentialMode::System, invalidId, QStringLiteral("u"),
+              !Root::CredentialStore::write(invalidId, QStringLiteral("u"),
                                             QString(), QString(), &error),
               error);
         check(QStringLiteral("write() error names the id"), error.contains(QStringLiteral("id")), error);
@@ -48,19 +48,19 @@ int main(int argc, char **argv)
     {
         QString error;
         check(QStringLiteral("remove() rejects invalid id"),
-              !Root::CredentialStore::remove(UnitValue::CredentialMode::System, invalidId, /*allowMissing=*/true,
+              !Root::CredentialStore::remove(invalidId, /*allowMissing=*/true,
                                              &error),
               error);
     }
     {
         QString error;
         check(QStringLiteral("healthy() rejects invalid id"),
-              !Root::CredentialStore::healthy(UnitValue::CredentialMode::System, invalidId, &error), error);
+              !Root::CredentialStore::healthy(invalidId, &error), error);
     }
     {
         QString error;
         check(QStringLiteral("assertAbsent() rejects invalid id (as a real failure, not a false meaning absent)"),
-              !Root::CredentialStore::assertAbsent(UnitValue::CredentialMode::System, invalidId, &error), error);
+              !Root::CredentialStore::assertAbsent(invalidId, &error), error);
         check(QStringLiteral("assertAbsent() sets an error for the invalid-id case (design: error only for real I/O failure)"),
               !error.isEmpty(), error);
     }
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     {
         QString error;
         check(QStringLiteral("write() rejects invalid id for Session too"),
-              !Root::CredentialStore::write(UnitValue::CredentialMode::Session, invalidId, QStringLiteral("u"),
+              !Root::CredentialStore::write(invalidId, QStringLiteral("u"),
                                             QString(), QString(), &error),
               error);
     }
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
         const QString validId = QStringLiteral("0123456789abcdef0123456789abcdef");
         QString error;
         check(QStringLiteral("rejected before any filesystem access"),
-              !Root::CredentialStore::write(UnitValue::CredentialMode::System, validId, QStringLiteral("alice"),
+              !Root::CredentialStore::write(validId, QStringLiteral("alice"),
                                             QString(), QString(), &error),
               error);
         check(QStringLiteral("specific 'password is required' error, not a permission/id error"),

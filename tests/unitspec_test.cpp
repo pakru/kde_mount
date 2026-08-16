@@ -113,7 +113,7 @@ int main(int argc, char **argv)
     QString error;
 
     out << "=== mount options are hardened ===" << Qt::endl;
-    const QString opts = UnitSpec::mountOptions(uid, gid, QStringLiteral("/run/nasmount/x.cred"));
+    const QString opts = UnitSpec::mountOptions(uid, gid, QStringLiteral("/etc/nasmount/x.cred"));
     const QStringList optList = opts.split(QLatin1Char(','));
     for (const QString &flag : {QStringLiteral("nosuid"), QStringLiteral("nodev"),
                                 QStringLiteral("forceuid"), QStringLiteral("forcegid")}) {
@@ -327,21 +327,17 @@ int main(int argc, char **argv)
         const QString id = QStringLiteral("0123456789abcdef0123456789abcdef");
 
         const struct {
-            UnitValue::CredentialMode mode;
             UnitValue::AuthenticationKind auth;
             const char *label;
         } combos[] = {
-            {UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Credentials, "session/credentials"},
-            {UnitValue::CredentialMode::Session, UnitValue::AuthenticationKind::Guest, "session/guest"},
-            {UnitValue::CredentialMode::System, UnitValue::AuthenticationKind::Credentials, "system/credentials"},
-            {UnitValue::CredentialMode::System, UnitValue::AuthenticationKind::Guest, "system/guest"},
+            {UnitValue::AuthenticationKind::Credentials, "credentials"},
+            {UnitValue::AuthenticationKind::Guest, "guest"},
         };
         for (const auto &combo : combos) {
             UnitValue::Marker marker;
             marker.ownerUid = uid;
             marker.ownerGid = gid;
             marker.id = id;
-            marker.mode = combo.mode;
             marker.authentication = combo.auth;
 
             QString mountContent, automountContent, err;
@@ -351,7 +347,7 @@ int main(int argc, char **argv)
                   UnitSpec::buildAutomountUnitContent(marker, mountPoint, &automountContent, &err), err);
 
             const bool expectCredential = (combo.auth == UnitValue::AuthenticationKind::Credentials);
-            const QString expectedCredPath = UnitSpec::credentialPathFor(combo.mode, id);
+            const QString expectedCredPath = UnitSpec::credentialPathFor(id);
             check(QStringLiteral("%1: credential path present iff authenticated").arg(combo.label),
                   mountContent.contains(QStringLiteral("credentials=%1").arg(expectedCredPath)) == expectCredential,
                   mountContent);
@@ -376,7 +372,6 @@ int main(int argc, char **argv)
         marker.ownerUid = uid;
         marker.ownerGid = gid;
         marker.id = QStringLiteral("0123456789abcdef0123456789abcdef");
-        marker.mode = UnitValue::CredentialMode::Session;
         marker.authentication = UnitValue::AuthenticationKind::Credentials;
 
         QString baseMount, baseAutomount, err;
@@ -441,19 +436,12 @@ int main(int argc, char **argv)
             // be rejected: Options= no longer matches this marker's id.
             QString tampered = baseMount;
             const QString wrongCredPath =
-                UnitSpec::credentialPathFor(UnitValue::CredentialMode::Session,
-                                            QStringLiteral("ffffffffffffffffffffffffffffffff"));
-            tampered.replace(UnitSpec::credentialPathFor(marker.mode, marker.id), wrongCredPath);
+                UnitSpec::credentialPathFor(QStringLiteral("ffffffffffffffffffffffffffffffff"));
+            tampered.replace(UnitSpec::credentialPathFor(marker.id), wrongCredPath);
             expectMountRejected(QStringLiteral("credential path inconsistent with marker id rejected"), tampered);
         }
-        {
-            // A credential path from the *other* mode's directory, same id:
-            // Options= still cannot match, since mode is baked into the path.
-            QString tampered = baseMount;
-            tampered.replace(UnitSpec::credentialPathFor(UnitValue::CredentialMode::Session, marker.id),
-                             UnitSpec::credentialPathFor(UnitValue::CredentialMode::System, marker.id));
-            expectMountRejected(QStringLiteral("credential path inconsistent with marker mode rejected"), tampered);
-        }
+        // The "credential path from the other mode's directory" case is gone:
+        // there is one credential directory, so no such path exists to plant.
         {
             // Take a genuine guest unit and splice a credential path into its
             // Options= — must be rejected even though the path itself is
@@ -465,7 +453,7 @@ int main(int argc, char **argv)
                   UnitSpec::buildMountUnitContent(guestMarker, unc, mountPoint, &guestContent, &err), err);
             guestContent.replace(QStringLiteral("Options=guest,"),
                                  QStringLiteral("Options=credentials=%1,")
-                                     .arg(UnitSpec::credentialPathFor(guestMarker.mode, guestMarker.id)));
+                                     .arg(UnitSpec::credentialPathFor(guestMarker.id)));
             QString what, error;
             const bool okResult =
                 UnitSpec::validateMountUnitBody(guestContent, guestMarker, mountPoint, &what, &error);
@@ -507,6 +495,28 @@ int main(int argc, char **argv)
             QString tampered = baseAutomount;
             tampered.replace(QStringLiteral("Where=/mnt/nas"), QStringLiteral("Where=/mnt/nas\\"));
             expectAutomountRejected(QStringLiteral("line continuation in automount rejected"), tampered);
+        }
+        // systemd parses Condition*= only out of [Unit]; one emitted under
+        // [Automount] is ignored with a log line, silently voiding the guard
+        // that stops a trigger being set up over a missing mount point. A
+        // round-trip generate/validate pair cannot catch that on its own --
+        // both sides agreed on the wrong section once before -- so pin the
+        // section placement itself.
+        {
+            const int conditionAt = baseAutomount.indexOf(QStringLiteral("ConditionPathIsDirectory="));
+            const int automountAt = baseAutomount.indexOf(QStringLiteral("[Automount]"));
+            const int unitAt = baseAutomount.indexOf(QStringLiteral("[Unit]"));
+            check(QStringLiteral("ConditionPathIsDirectory= is emitted inside [Unit], not [Automount]"),
+                  conditionAt > unitAt && unitAt >= 0 && automountAt > conditionAt, baseAutomount);
+        }
+        {
+            // The pre-fix layout: condition under [Automount], absent from
+            // [Unit]. It must now fail closed rather than validate.
+            QString oldLayout = baseAutomount;
+            oldLayout.replace(QStringLiteral("ConditionPathIsDirectory=/mnt/nas\n\n"), QStringLiteral("\n"));
+            oldLayout.replace(QStringLiteral("DirectoryMode=0700"),
+                              QStringLiteral("DirectoryMode=0700\nConditionPathIsDirectory=/mnt/nas"));
+            expectAutomountRejected(QStringLiteral("legacy [Automount]-section condition rejected"), oldLayout);
         }
     }
 

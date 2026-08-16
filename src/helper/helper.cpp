@@ -140,14 +140,8 @@ class NasMountHelper : public QObject
     Q_OBJECT
 
 public Q_SLOTS:
-    ActionReply define(const QVariantMap &args);
     ActionReply definesystem(const QVariantMap &args);
-    ActionReply undefine(const QVariantMap &args);
     ActionReply undefinesystem(const QVariantMap &args);
-    ActionReply arm(const QVariantMap &args);
-    ActionReply disarm(const QVariantMap &args);
-    ActionReply mountnow(const QVariantMap &args);
-    ActionReply unmountnow(const QVariantMap &args);
     ActionReply inventory(const QVariantMap &args);
     ActionReply purge(const QVariantMap &args);
 };
@@ -161,7 +155,7 @@ namespace
  * §7.1). A fresh create only — an existing Partial half is never repaired;
  * it must be removed first (simplification-implementation-plan.md §4.1/§4.3).
  */
-ActionReply doDefine(const QVariantMap &args, UnitValue::CredentialMode mode)
+ActionReply doDefine(const QVariantMap &args)
 {
     QString error;
     auto lock = Root::RootLock::acquire(&error);
@@ -183,18 +177,16 @@ ActionReply doDefine(const QVariantMap &args, UnitValue::CredentialMode mode)
     const QString username = args.value(QStringLiteral("username")).toString();
     const QString domain = args.value(QStringLiteral("domain")).toString();
     const QString password = args.value(QStringLiteral("password")).toString();
-    if (mode == UnitValue::CredentialMode::System) {
-        // Only definesystem takes domain/password at define time (design
-        // §8.1) -- Session's credential is written later, by arm().
-        if (!validateCredentialFields(username, domain, password, &error)) {
-            return fail(error);
-        }
-        if (!guestFieldsConsistent(username, domain, password)) {
-            return fail(
-                QStringLiteral("a share with no username is guest, and cannot also have a password or domain"));
-        }
-    } else if (UnitSpec::hasControlChars(username)) {
-        return fail(QStringLiteral("username contains control characters"));
+    // Define takes domain/password and writes the credential itself (design
+    // §8.1): there is no later step that could supply them, so both are
+    // validated here. validateCredentialFields() covers the username's own
+    // control characters too.
+    if (!validateCredentialFields(username, domain, password, &error)) {
+        return fail(error);
+    }
+    if (!guestFieldsConsistent(username, domain, password)) {
+        return fail(
+            QStringLiteral("a share with no username is guest, and cannot also have a password or domain"));
     }
 
     const auto def = Verify::inspectDefinition(paths, caller.uid, plan.path);
@@ -229,12 +221,9 @@ ActionReply doDefine(const QVariantMap &args, UnitValue::CredentialMode mode)
     input.mountPoint = plan.path;
     input.unitName = paths.unitName;
     input.username = username;
-    input.mode = mode;
-    if (mode == UnitValue::CredentialMode::System) {
-        input.domain = domain;
-        input.password = password;
-        input.mountPlan = plan; // needed for the immediate-arm path walk (design §6.3a)
-    }
+    input.domain = domain;
+    input.password = password;
+    input.mountPlan = plan; // needed for the immediate-arm path walk (design §6.3a)
 
     const Root::Operations::DefineOutput result = Root::Operations::define(input);
     if (!result.ok) {
@@ -250,29 +239,31 @@ ActionReply doDefine(const QVariantMap &args, UnitValue::CredentialMode mode)
 
 } // namespace
 
-ActionReply NasMountHelper::define(const QVariantMap &args)
-{
-    return doDefine(args, UnitValue::CredentialMode::Session);
-}
-
 ActionReply NasMountHelper::definesystem(const QVariantMap &args)
 {
-    return doDefine(args, UnitValue::CredentialMode::System);
+    return doDefine(args);
 }
 
 namespace
 {
 
-/** Design §7.1: "existing mode must be Session" for undefine,
- *  "require System" for undefinesystem -- derived from the
- *  validated on-disk marker (`def.mode`), never from an argument. */
-QString modeMismatchError(const QString &verb, const QString &path, UnitValue::CredentialMode required)
-{
-    return QStringLiteral("cannot %1 %2: it is not a %3-mode definition; use the matching action")
-        .arg(verb, path, required == UnitValue::CredentialMode::System ? QStringLiteral("System") : QStringLiteral("Session"));
-}
-
-ActionReply doUndefine(const QVariantMap &args, UnitValue::CredentialMode mode)
+/**
+ * Removal is mode-agnostic on purpose. There is one removal action now, and
+ * it is auth_admin -- strictly more authenticated than the passwordless
+ * `undefine` that used to remove sign-in-scoped shares. The old
+ * `def.mode != mode` gate existed to stop one tier's action acting on the
+ * other tier's definition while the two carried *different* authorization
+ * levels; with a single, stricter action that distinction is gone, and
+ * enforcing it would instead make a definition left over from the previous
+ * mode impossible to remove through the UI at all -- forcing a hand `rm` of
+ * root-owned unit files, which is exactly what this tool exists to avoid.
+ *
+ * `def.mode` is still what drives the work: Operations::remove() uses it to
+ * delete the credential from wherever that definition actually put it
+ * (/run for a sign-in-scoped leftover, /etc otherwise), so either kind is
+ * cleaned up correctly rather than leaving an orphaned credential file.
+ */
+ActionReply doUndefine(const QVariantMap &args)
 {
     QString error;
     auto lock = Root::RootLock::acquire(&error);
@@ -293,15 +284,10 @@ ActionReply doUndefine(const QVariantMap &args, UnitValue::CredentialMode mode)
                         .arg(plan.path,
                              def.detail.isEmpty() ? QStringLiteral("no definition owned by you exists") : def.detail));
     }
-    if (def.mode != mode) {
-        return fail(modeMismatchError(QStringLiteral("undefine"), plan.path, mode));
-    }
-
     Root::Operations::RemovalInput input;
     input.ownerUid = def.ownerUid;
     input.ownerGid = def.ownerGid;
     input.shareId = def.id;
-    input.mode = def.mode;
     input.authentication = def.authentication;
     input.mountPoint = plan.path;
     input.unitName = paths.unitName;
@@ -316,213 +302,9 @@ ActionReply doUndefine(const QVariantMap &args, UnitValue::CredentialMode mode)
 
 } // namespace
 
-ActionReply NasMountHelper::undefine(const QVariantMap &args)
-{
-    return doUndefine(args, UnitValue::CredentialMode::Session);
-}
-
 ActionReply NasMountHelper::undefinesystem(const QVariantMap &args)
 {
-    return doUndefine(args, UnitValue::CredentialMode::System);
-}
-
-ActionReply NasMountHelper::arm(const QVariantMap &args)
-{
-    QString error;
-    auto lock = Root::RootLock::acquire(&error);
-    if (!lock) {
-        return fail(error);
-    }
-
-    CallerInfo caller;
-    UnitSpec::MountpointPlan plan;
-    UnitValue::UnitPaths paths;
-    if (!prepare(args, &caller, &plan, &paths, &error)) {
-        return fail(error);
-    }
-
-    const QString username = args.value(QStringLiteral("username")).toString();
-    const QString domain = args.value(QStringLiteral("domain")).toString();
-    const QString password = args.value(QStringLiteral("password")).toString();
-    if (!validateCredentialFields(username, domain, password, &error)) {
-        return fail(error);
-    }
-
-    const auto def = Verify::inspectDefinition(paths, caller.uid, plan.path);
-    if (def.state != Verify::Definition::Pair) {
-        return fail(QStringLiteral("cannot arm %1: %2")
-                        .arg(plan.path, def.detail.isEmpty() ? QStringLiteral("no owned definition exists") : def.detail));
-    }
-    if (def.mode != UnitValue::CredentialMode::Session) {
-        // System shares are armed by nasmount-boot, never by this passwordless
-        // action (design §7.1/§4.4's "authentication costs nothing at sign-in
-        // ... does not cover System").
-        return fail(QStringLiteral("cannot arm %1: it is a System-mode share, armed automatically at boot")
-                        .arg(plan.path));
-    }
-    if (def.authentication == UnitValue::AuthenticationKind::Credentials && username.isEmpty()) {
-        return fail(QStringLiteral("this share requires a username"));
-    }
-    if (!guestFieldsConsistent(username, domain, password)) {
-        return fail(
-            QStringLiteral("a share with no username is guest, and cannot also have a password or domain"));
-    }
-    const Verify::RuntimeSnapshot snapshot = Verify::inspectRuntime(paths.unitName, plan.path, def.what);
-    if (snapshot.automount != Verify::AutomountState::Inactive || snapshot.mount != Verify::MountState::Absent) {
-        return fail(QStringLiteral("cannot arm %1: already armed or mounted").arg(plan.path));
-    }
-
-    // The path was validated at define time, possibly long ago — re-run the
-    // full descriptor walk now, while it is still an ordinary directory,
-    // before starting anything.
-    const int mpFd = UnitSpec::openMountpointNoFollow(plan, caller.uid, caller.gid, &error);
-    if (mpFd < 0) {
-        return fail(error);
-    }
-    ::close(mpFd);
-
-    Root::Arming::ArmRequest req;
-    req.ownerUid = def.ownerUid;
-    req.ownerGid = def.ownerGid;
-    req.shareId = def.id;
-    req.mode = def.mode;
-    req.authentication = def.authentication;
-    req.mountPoint = plan.path;
-    req.unitName = paths.unitName;
-    req.what = def.what;
-    req.username = username;
-    req.domain = domain;
-    req.password = password;
-
-    if (!Root::Arming::arm(req, &error)) {
-        return fail(error);
-    }
-    return ok(QStringLiteral("%1 armed").arg(plan.path));
-}
-
-ActionReply NasMountHelper::disarm(const QVariantMap &args)
-{
-    QString error;
-    auto lock = Root::RootLock::acquire(&error);
-    if (!lock) {
-        return fail(error);
-    }
-
-    CallerInfo caller;
-    UnitSpec::MountpointPlan plan;
-    UnitValue::UnitPaths paths;
-    if (!prepare(args, &caller, &plan, &paths, &error)) {
-        return fail(error);
-    }
-
-    const auto def = Verify::inspectDefinition(paths, caller.uid, plan.path);
-    // Partial accepted too (plan §5.8/design §12.2): the session supervisor's
-    // teardown sweep must be able to stop a stranded surviving half, and
-    // safeStop()'s correlation gate underneath already handles either half
-    // correctly on its own -- refusing Partial here would only leave such a
-    // share strandable at every logout.
-    if (def.state != Verify::Definition::Pair && def.state != Verify::Definition::Partial) {
-        return fail(QStringLiteral("cannot disarm %1: %2")
-                        .arg(plan.path, def.detail.isEmpty() ? QStringLiteral("no owned definition exists") : def.detail));
-    }
-    if (def.mode != UnitValue::CredentialMode::Session) {
-        return fail(QStringLiteral("cannot disarm %1: it is a System-mode share, managed by nasmount-boot")
-                        .arg(plan.path));
-    }
-
-    Root::Arming::DisarmRequest req;
-    req.ownerUid = def.ownerUid;
-    req.ownerGid = def.ownerGid;
-    req.shareId = def.id;
-    req.mode = def.mode;
-    req.authentication = def.authentication;
-    req.mountPoint = plan.path;
-    req.unitName = paths.unitName;
-    req.what = def.what;
-
-    if (!Root::Arming::disarm(req, &error)) {
-        return fail(error);
-    }
-    return ok(QStringLiteral("%1 disarmed").arg(plan.path));
-}
-
-ActionReply NasMountHelper::mountnow(const QVariantMap &args)
-{
-    // mount-now/unmount-now never change credential lifetime or a
-    // definition (plan §2.6.7) -- they only trigger/release the CIFS mount
-    // behind an already-armed, already-trusted automount.
-    QString error;
-    auto lock = Root::RootLock::acquire(&error);
-    if (!lock) {
-        return fail(error);
-    }
-
-    CallerInfo caller;
-    UnitSpec::MountpointPlan plan;
-    UnitValue::UnitPaths paths;
-    if (!prepare(args, &caller, &plan, &paths, &error)) {
-        return fail(error);
-    }
-
-    const auto def = Verify::inspectDefinition(paths, caller.uid, plan.path);
-    if (def.state != Verify::Definition::Pair) {
-        return fail(QStringLiteral("cannot mount %1: %2")
-                        .arg(plan.path, def.detail.isEmpty() ? QStringLiteral("no owned definition exists") : def.detail));
-    }
-    if (def.mode != UnitValue::CredentialMode::Session) {
-        return fail(QStringLiteral("cannot mount %1: it is a System-mode share").arg(plan.path));
-    }
-    const Verify::RuntimeSnapshot snapshot = Verify::inspectRuntime(paths.unitName, plan.path, def.what);
-    if (snapshot.automount != Verify::AutomountState::Active || snapshot.mount != Verify::MountState::Absent) {
-        return fail(QStringLiteral("cannot mount %1: automount is not armed, or it is already mounted").arg(plan.path));
-    }
-    // Never open() the path here: doing so would trigger the very mount this
-    // is validating. The recorded instance id is the only safe check
-    // available at this point.
-    if (snapshot.activationTrust != Verify::ActivationTrust::Trusted) {
-        return fail(QStringLiteral("cannot mount %1: the armed automount is not the instance this helper created")
-                        .arg(plan.path));
-    }
-
-    if (!Root::SystemdOps::start(paths.unitName + QStringLiteral(".mount"), &error)) {
-        return fail(error);
-    }
-    return ok(QStringLiteral("%1 mounted").arg(plan.path));
-}
-
-ActionReply NasMountHelper::unmountnow(const QVariantMap &args)
-{
-    QString error;
-    auto lock = Root::RootLock::acquire(&error);
-    if (!lock) {
-        return fail(error);
-    }
-
-    CallerInfo caller;
-    UnitSpec::MountpointPlan plan;
-    UnitValue::UnitPaths paths;
-    if (!prepare(args, &caller, &plan, &paths, &error)) {
-        return fail(error);
-    }
-
-    const auto def = Verify::inspectDefinition(paths, caller.uid, plan.path);
-    if (def.state != Verify::Definition::Pair) {
-        return fail(QStringLiteral("cannot unmount %1: %2")
-                        .arg(plan.path, def.detail.isEmpty() ? QStringLiteral("no owned definition exists") : def.detail));
-    }
-    if (def.mode != UnitValue::CredentialMode::Session) {
-        return fail(QStringLiteral("cannot unmount %1: it is a System-mode share").arg(plan.path));
-    }
-    const Verify::RuntimeSnapshot snapshot = Verify::inspectRuntime(paths.unitName, plan.path, def.what);
-    if (snapshot.mount != Verify::MountState::Present || snapshot.verification != Verify::VerificationState::Match) {
-        return fail(QStringLiteral("cannot unmount %1: not mounted, or does not correlate with this definition")
-                        .arg(plan.path));
-    }
-
-    if (!Root::SystemdOps::stop(paths.unitName + QStringLiteral(".mount"), &error)) {
-        return fail(QStringLiteral("unmount failed: %1").arg(error));
-    }
-    return ok(QStringLiteral("%1 unmounted").arg(plan.path));
+    return doUndefine(args);
 }
 
 ActionReply NasMountHelper::inventory(const QVariantMap &args)

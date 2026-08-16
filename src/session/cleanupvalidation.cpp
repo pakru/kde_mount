@@ -63,12 +63,10 @@ bool validateInstallManifest(const QString &manifestPath, QStringList *targets, 
     }
     static const QStringList requiredPatterns = {
         QStringLiteral("^/usr/bin/nasmount-dialog$"),
-        QStringLiteral("^/usr/bin/nasmount-supervisor$"),
         QStringLiteral("^/usr/bin/nasmount-cleanup$"),
         QStringLiteral("^/usr/lib/[^/]+/libexec/kf6/kauth/nasmount-helper$"),
         QStringLiteral("^/usr/lib/[^/]+/libexec/nasmount-boot$"),
         QStringLiteral("^/usr/lib/[^/]+/qt6/plugins/plasma/kcms/systemsettings/kcm_nasmount\\.so$"),
-        QStringLiteral("^/usr/lib/systemd/user/nasmount-session\\.service$"),
         QStringLiteral("^/usr/lib/systemd/system/nasmount-boot\\.service$"),
         QStringLiteral("^/usr/share/applications/kcm_nasmount\\.desktop$"),
         QStringLiteral("^/usr/share/polkit-1/actions/io\\.github\\.pakru\\.nasmount\\.policy$"),

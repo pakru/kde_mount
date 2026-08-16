@@ -57,52 +57,6 @@ StopPrecheck evaluateStopPrecheck(const Verify::RuntimeSnapshot &snapshot, QStri
  */
 StopResult safeStop(const QString &unitName, const QString &mountPoint, const QString &expectedWhat, QString *error);
 
-/** What arm() needs. Session mode only writes a credential (System's
- *  persistent /etc credential is written separately, after the unit files
- *  have been durably created but before systemd is reloaded). */
-struct ArmRequest {
-    uid_t ownerUid = 0;
-    gid_t ownerGid = 0;
-    QString shareId;
-    UnitValue::CredentialMode mode = UnitValue::CredentialMode::Session;
-    UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
-    QString mountPoint; ///< canonical
-    QString unitName;
-    QString what; ///< the .mount unit's own What=, for the runtime precheck
-    QString username;
-    QString domain;
-    QString password;
-};
-
-/**
- * Standalone Session arm (design §9.5, simplification plan §4.2's same-call
- * sequence): writes the Session credential if required, starts the
- * automount, then captures and durably records its unique instance id.
- * Reports success only once the id is recorded. A same-process failure
- * after start stops only the exact instance this call observed. Credential
- * cleanup happens only after that stop is confirmed; otherwise the active
- * untrusted state remains visible. A crash leaves whatever was durably
- * written for the next refresh.
- */
-bool arm(const ArmRequest &req, QString *error);
-
-struct DisarmRequest {
-    uid_t ownerUid = 0;
-    gid_t ownerGid = 0;
-    QString shareId;
-    UnitValue::CredentialMode mode;
-    UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
-    QString mountPoint;
-    QString unitName;
-    QString what; ///< the .mount unit's own What=, for the correlation gate
-};
-
-/** Standalone disarm (design §9.5): stops both halves via safeStop(), then
- *  removes the runtime credential and recorded id. Each step is checked and
- *  idempotent, so a failure partway simply leaves the remaining steps safe
- *  to retry. */
-bool disarm(const DisarmRequest &req, QString *error);
-
 // ---------------------------------------------------------------------------
 // Shared single-share arming (plan §4.1, design §6.3/§6.3a/§6.4) — used by
 // definesystem's immediate arm and by nasmount-boot, so both
@@ -143,7 +97,6 @@ struct ArmShareRequest {
     uid_t ownerUid = 0;
     gid_t ownerGid = 0;
     QString shareId;
-    UnitValue::CredentialMode mode = UnitValue::CredentialMode::System;
     UnitValue::AuthenticationKind authentication = UnitValue::AuthenticationKind::Credentials;
     UnitSpec::MountpointPlan plan; ///< plan.path is this share's canonical mount point
     QString unitName;

@@ -46,7 +46,6 @@ CMakeLists.txt.user*
 .claude/settings.local.json
 
 # --- crash and profiling artifacts ------------------------------------------
-core
 core.[0-9]*
 vgcore.*
 *.log

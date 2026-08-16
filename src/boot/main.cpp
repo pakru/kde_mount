@@ -85,7 +85,6 @@ void armOneShare(const Verify::OwnedUnit &unit)
     req.ownerUid = unit.ownerUid;
     req.ownerGid = unit.ownerGid;
     req.shareId = unit.id;
-    req.mode = UnitValue::CredentialMode::System;
     req.authentication = unit.authentication;
     req.plan = plan;
     req.unitName = unit.unitName;
@@ -117,9 +116,6 @@ int main(int argc, char **argv)
     int attempted = 0;
     int skipped = 0;
     for (const Verify::OwnedUnit &unit : units) {
-        if (unit.mode != UnitValue::CredentialMode::System) {
-            continue; // Session shares are the session supervisor's job, not boot's
-        }
         if (unit.state != Verify::Definition::Pair) {
             ++skipped;
             const QString label = unit.mountPoint.isEmpty() ? unit.unitName : unit.mountPoint;

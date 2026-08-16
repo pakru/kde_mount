@@ -40,10 +40,14 @@ mode_t modeFor(ArtifactKind kind)
     switch (kind) {
     case ArtifactKind::Directory:
         return 0700;
+    case ArtifactKind::PublicDirectory:
+        return 0755;
     case ArtifactKind::UnitFile:
         return 0644;
     case ArtifactKind::SensitiveFile:
         return 0600;
+    case ArtifactKind::PublicRecord:
+        return 0644;
     }
     return 0600;
 }
@@ -91,7 +95,7 @@ int openSystemRoot(const QString &absolutePath, QString *error)
     return fd;
 }
 
-int openVerifiedDir(int parentFd, const QString &name, QString *error)
+int openVerifiedDir(int parentFd, const QString &name, ArtifactKind dirKind, QString *error)
 {
     if (!isSingleComponent(name)) {
         *error = QStringLiteral("invalid directory component: %1").arg(name);
@@ -104,7 +108,7 @@ int openVerifiedDir(int parentFd, const QString &name, QString *error)
         return -1;
     }
     QString verifyError;
-    if (!verifyDescriptor(fd, FileKind::Directory, 0, modeFor(ArtifactKind::Directory), &verifyError)) {
+    if (!verifyDescriptor(fd, FileKind::Directory, 0, modeFor(dirKind), &verifyError)) {
         *error = QStringLiteral("%1: %2").arg(name, verifyError);
         ::close(fd);
         return -1;
@@ -112,7 +116,7 @@ int openVerifiedDir(int parentFd, const QString &name, QString *error)
     return fd;
 }
 
-int createAndVerifyDir(int parentFd, const QString &name, QString *error)
+int createAndVerifyDir(int parentFd, const QString &name, ArtifactKind dirKind, QString *error)
 {
     if (!isSingleComponent(name)) {
         *error = QStringLiteral("invalid directory component: %1").arg(name);
@@ -120,7 +124,7 @@ int createAndVerifyDir(int parentFd, const QString &name, QString *error)
     }
     const QByteArray raw = name.toLocal8Bit();
     bool created = false;
-    if (::mkdirat(parentFd, raw.constData(), modeFor(ArtifactKind::Directory)) == 0) {
+    if (::mkdirat(parentFd, raw.constData(), modeFor(dirKind)) == 0) {
         created = true;
     } else if (errno != EEXIST) {
         *error = QStringLiteral("cannot create %1: %2").arg(name, errnoText());
@@ -134,7 +138,7 @@ int createAndVerifyDir(int parentFd, const QString &name, QString *error)
         return -1;
     }
     QString openError;
-    const int fd = openVerifiedDir(parentFd, name, &openError);
+    const int fd = openVerifiedDir(parentFd, name, dirKind, &openError);
     if (fd < 0) {
         *error = openError.isEmpty() ? QStringLiteral("cannot open just-created %1").arg(name) : openError;
         return -1;
@@ -202,11 +206,19 @@ bool durableReplace(int dirFd, const QString &name, const QByteArray &content, A
 
     QString tmpName;
     int fd = -1;
+    // Created at modeFor(kind) up front, not a fixed 0600 later fchmod'd into
+    // place: a kill between create and the fchmod below would otherwise leave
+    // a temp file whose mode matches neither the requested-open mode nor the
+    // target one, and durableRemoveTree()'s per-kind exact-mode check (a
+    // PublicRecord tree expects 0644 throughout, not 0600) must not choke on
+    // it during a later purge. The fchmod below still runs unconditionally --
+    // this open mode is a best-effort head start, subject to umask, not the
+    // guarantee.
     for (int attempt = 0; attempt < 8 && fd < 0; ++attempt) {
         tmpName = QStringLiteral(".nasmount-tmp-%1")
                       .arg(QRandomGenerator64::global()->generate64(), 16, 16, QLatin1Char('0'));
         const QByteArray raw = tmpName.toLocal8Bit();
-        fd = ::openat(dirFd, raw.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        fd = ::openat(dirFd, raw.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, modeFor(kind));
         if (fd < 0 && errno != EEXIST) {
             *error = QStringLiteral("cannot create temp file for %1: %2").arg(name, errnoText());
             return false;
@@ -275,14 +287,15 @@ bool durableUnlink(int dirFd, const QString &name, bool allowMissing, QString *e
     return true;
 }
 
-bool durableRemoveTree(int parentFd, const QString &name, QString *error)
+bool durableRemoveTree(int parentFd, const QString &name, ArtifactKind dirKind, ArtifactKind entryKind,
+                       QString *error)
 {
     if (!isSingleComponent(name)) {
         *error = QStringLiteral("invalid directory component: %1").arg(name);
         return false;
     }
     QString openError;
-    const int dirFd = openVerifiedDir(parentFd, name, &openError);
+    const int dirFd = openVerifiedDir(parentFd, name, dirKind, &openError);
     if (dirFd < 0) {
         if (openError.isEmpty()) {
             return true; // already absent -- idempotent
@@ -325,12 +338,13 @@ bool durableRemoveTree(int parentFd, const QString &name, QString *error)
             *error = QStringLiteral("refusing to recurse into unexpected subdirectory %1/%2").arg(name, QString::fromLocal8Bit(entryName));
             return false;
         }
-        // Every tree this primitive clears contains only nasmount's private
-        // root-owned 0600 artifacts (credentials, runtime IDs, and the root
-        // lock). Refuse a symlink, device, foreign owner, or drifted mode
-        // instead of turning a cleanup operation into an unreviewed deletion
-        // primitive.
-        if (!S_ISREG(entrySt.st_mode) || entrySt.st_uid != 0 || (entrySt.st_mode & 07777) != 0600) {
+        // Every tree this primitive clears contains only nasmount's own
+        // root-owned artifacts of exactly `entryKind` (credentials and the
+        // root lock in a Directory; automount-id records in a
+        // PublicDirectory). Refuse a symlink, device, foreign owner, or
+        // drifted mode instead of turning a cleanup operation into an
+        // unreviewed deletion primitive.
+        if (!S_ISREG(entrySt.st_mode) || entrySt.st_uid != 0 || (entrySt.st_mode & 07777) != modeFor(entryKind)) {
             ::closedir(dir);
             ::close(dirFd);
             *error = QStringLiteral("refusing unsafe entry %1/%2").arg(name, QString::fromLocal8Bit(entryName));

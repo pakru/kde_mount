@@ -28,7 +28,7 @@ QList<ShareRecord> buildFor(uid_t uid, QString *error)
         rec.id = unit.id;
         rec.credentialApplicable = true;
         QString ignored;
-        rec.credentialHealthy = CredentialStore::healthy(unit.mode, unit.id, &ignored);
+        rec.credentialHealthy = CredentialStore::healthy(unit.id, &ignored);
         records.append(rec);
     }
     return records;

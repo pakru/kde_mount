@@ -151,9 +151,10 @@ RowClassification classifyRow(const RowClassifyInput &in)
     }
 
     // Inactive automount, nothing mounted: the ordinary resting state for
-    // both modes now -- a boot-coordinator problem is surfaced by the
-    // separate global health banner, not by this row.
-    if (in.mode == UnitValue::CredentialMode::System && credentialUnhealthy(in)) {
+    // a boot-coordinator problem is surfaced by the separate global health
+    // banner, not by this row. The credential is persistent, so it is
+    // expected present whether or not the trigger is currently armed.
+    if (credentialUnhealthy(in)) {
         out.state = DisplayState::MissingCredentials;
         out.detail = QStringLiteral("stored credential is missing or unhealthy");
         out.canRemoveDefinition = true;
@@ -164,10 +165,8 @@ RowClassification classifyRow(const RowClassifyInput &in)
     return out;
 }
 
-bool storeDefinitionDrift(const QString &storeUnc, const QString &storeMountPoint,
-                          UnitValue::CredentialMode storeMode, bool storeSaysGuest,
+bool storeDefinitionDrift(const QString &storeUnc, const QString &storeMountPoint, bool storeSaysGuest,
                           const QString &definitionWhat, const QString &definitionMountPoint,
-                          UnitValue::CredentialMode definitionMode,
                           UnitValue::AuthenticationKind definitionAuthentication)
 {
     QString normalisedStoreUnc;
@@ -175,8 +174,7 @@ bool storeDefinitionDrift(const QString &storeUnc, const QString &storeMountPoin
     const bool uncValid = UnitSpec::validateUnc(storeUnc, &normalisedStoreUnc, &uncError);
     const bool markerSaysGuest = (definitionAuthentication == UnitValue::AuthenticationKind::Guest);
     const bool uncDrift = !definitionWhat.isEmpty() && (!uncValid || normalisedStoreUnc != definitionWhat);
-    return storeMountPoint != definitionMountPoint || storeMode != definitionMode
-        || storeSaysGuest != markerSaysGuest || uncDrift;
+    return storeMountPoint != definitionMountPoint || storeSaysGuest != markerSaysGuest || uncDrift;
 }
 
 namespace
@@ -278,8 +276,6 @@ QVariant MountModel::data(const QModelIndex &index, int role) const
         return row.username;
     case DomainRole:
         return row.domain;
-    case ReconnectRole:
-        return row.reconnect;
     case StateRole:
         return static_cast<int>(row.state);
     case StateTextRole:
@@ -304,8 +300,6 @@ QVariant MountModel::data(const QModelIndex &index, int role) const
         return row.detail;
     case HasUnitFilesRole:
         return row.hasUnitFiles;
-    case ModeRole:
-        return row.mode == UnitValue::CredentialMode::System ? QStringLiteral("system") : QStringLiteral("session");
     case AuthenticationRole:
         return row.authentication == UnitValue::AuthenticationKind::Guest ? QStringLiteral("guest")
                                                                           : QStringLiteral("credentials");
@@ -340,12 +334,10 @@ QHash<int, QByteArray> MountModel::roleNames() const
         {MountPointRole, "mountPoint"},
         {UsernameRole, "username"},
         {DomainRole, "domain"},
-        {ReconnectRole, "reconnect"},
         {StateRole, "state"},
         {StateTextRole, "stateText"},
         {DetailRole, "detail"},
         {HasUnitFilesRole, "hasUnitFiles"},
-        {ModeRole, "mode"},
         {AuthenticationRole, "authentication"},
         {DefinitionStateRole, "definitionState"},
         {HasStoreRecordRole, "hasStoreRecord"},
@@ -368,19 +360,16 @@ QVariantMap MountModel::shareDetails(const QString &id) const
                 {QStringLiteral("mountPoint"), row.mountPoint},
                 {QStringLiteral("username"), row.username},
                 {QStringLiteral("domain"), row.domain},
-                {QStringLiteral("reconnect"), row.reconnect},
-                {QStringLiteral("mode"), row.mode == UnitValue::CredentialMode::System ? QStringLiteral("system")
-                                                                                        : QStringLiteral("session")},
             };
         }
     }
     return {};
 }
 
-bool MountModel::hasSystemShares() const
+bool MountModel::hasShares() const
 {
     for (const Row &row : m_rows) {
-        if (row.mode == UnitValue::CredentialMode::System) {
+        if (row.hasUnitFiles) {
             return true;
         }
     }
@@ -421,7 +410,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
         row.mountPoint = unit.mountPoint;
         row.unc = unit.what;
         row.definitionWhat = unit.what;
-        row.mode = unit.mode;
         row.authentication = unit.authentication;
         row.definitionState = definitionStateText(unit.state);
         row.hasUnitFiles = true;
@@ -432,7 +420,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
 
         RowClassifyInput in;
         in.definitionState = row.definitionState;
-        in.mode = unit.mode;
         in.authentication = unit.authentication;
         in.runtime = row.runtime;
         const RowClassification classification = classifyRow(in);
@@ -476,11 +463,9 @@ MountModel::RefreshResult MountModel::computeRefresh()
             } else {
                 row.username = share.username;
                 row.domain = share.domain;
-                row.reconnect = share.reconnect;
                 const bool storeSaysGuest = share.username.isEmpty();
-                row.drift = storeDefinitionDrift(share.unc, share.mountPoint, share.mode, storeSaysGuest,
-                                                  row.definitionWhat, row.mountPoint, row.mode,
-                                                  row.authentication);
+                row.drift = storeDefinitionDrift(share.unc, share.mountPoint, storeSaysGuest,
+                                                  row.definitionWhat, row.mountPoint, row.authentication);
                 if (!row.drift) {
                     QString normalisedStoreUnc;
                     QString ignored;
@@ -514,8 +499,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
             row.mountPoint = share.mountPoint;
             row.username = share.username;
             row.domain = share.domain;
-            row.reconnect = share.reconnect;
-            row.mode = share.mode; // nothing authoritative exists to override it with
             row.hasStoreRecord = true;
             row.storeCorrupt = snap.corrupt;
             row.definitionState = QStringLiteral("none");
@@ -537,7 +520,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
                         row.definitionState = definitionStateText(storedDefinition.state);
                         row.hasUnitFiles = true;
                         row.drift = true; // same path, different stable id
-                        row.mode = storedDefinition.mode;
                         row.authentication = storedDefinition.authentication;
                         row.mountPoint = storedDefinition.canonicalMountPoint;
                         row.definitionWhat = storedDefinition.what;
@@ -550,7 +532,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
 
             RowClassifyInput in;
             in.definitionState = row.definitionState;
-            in.mode = row.mode;
             in.authentication = row.authentication;
             in.hasStoreRecord = true;
             in.storeCorrupt = snap.corrupt;
@@ -598,7 +579,6 @@ MountModel::RefreshResult MountModel::computeRefresh()
             }
             RowClassifyInput in;
             in.definitionState = row.definitionState;
-            in.mode = row.mode;
             in.authentication = row.authentication;
             in.runtime = row.runtime; // reuse source 2's snapshot; never re-queried
             in.credentialApplicable = row.credentialApplicable;
