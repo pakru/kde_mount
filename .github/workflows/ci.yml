@@ -52,7 +52,7 @@ jobs:
           dpkg-deb --contents artifacts/*.deb > logs/dpkg-contents.txt
           dpkg-query -W > logs/build-packages.txt
       - name: Upload DEB and build evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-ubuntu-26.04-amd64
           path: |
@@ -91,7 +91,7 @@ jobs:
           rpm -qpR artifacts/*.rpm > logs/rpm-requires.txt
           rpm -qa > logs/build-packages.txt
       - name: Upload RPM and build evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-fedora-44-x86_64
           path: |
@@ -173,7 +173,7 @@ jobs:
           fi
           printf '%s smoke install/removal passed\n' '${{ matrix.target }}' > logs/result.txt
       - name: Upload smoke report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: smoke-${{ matrix.target }}
           path: logs/
@@ -204,7 +204,7 @@ jobs:
           ./packaging/verify-artifact-set.sh packages metadata
           cp packages/* metadata/* verified/
       - name: Upload verified candidate release set
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verified-native-packages
           path: verified/
