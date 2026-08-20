@@ -399,7 +399,7 @@ validate_release
 | `build_rpm_release` | `validate_release` | Repeat the clean Fedora 44 RPM build, full tests, lint, and inspection from the tag. | Final RPM |
 | `smoke_release_packages` | both build jobs | Install and remove each final package in a fresh matching container using the native package manager. | Two smoke reports |
 | `verify_release_set` | smoke job | Require exactly the two main packages; generate `nasmount-<version>-SHA256SUMS` and a JSON manifest with filenames, package metadata, target, commit, and digest. | Read-only release set |
-| `attest_and_publish` | verify job | Generate GitHub provenance for each versioned package; create a draft GitHub Release with `gh`; upload packages, checksums, and manifest with exact one-line latest-download and install/uninstall notes. | Protected `release` environment; `contents: write`, `id-token: write`, `attestations: write` |
+| `attest_and_publish` | verify job | Check out the validated tag without persisted credentials so `gh release create --verify-tag` has Git context; generate GitHub provenance for each versioned package; create a draft GitHub Release with `gh`; upload packages, checksums, and manifest with exact one-line latest-download and install/uninstall notes. | Protected `release` environment; `contents: write`, `id-token: write`, `attestations: write` |
 
 Use per-tag concurrency with cancellation disabled. Pin Actions to full commit
 SHAs with version comments, use the preinstalled `gh` CLI instead of a

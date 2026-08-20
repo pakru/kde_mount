@@ -37,6 +37,10 @@ grep -Fq 'cp "packages/$NASMOUNT_DEB" "release/$NASMOUNT_DEB_RELEASE_ASSET"' \
     "$repo_root/.github/workflows/release.yml"
 grep -Fq 'cp "packages/$NASMOUNT_RPM" "release/$NASMOUNT_RPM_RELEASE_ASSET"' \
     "$repo_root/.github/workflows/release.yml"
+grep -Fq 'name: Check out validated tag for publication' \
+    "$repo_root/.github/workflows/release.yml"
+grep -A5 -F 'name: Check out validated tag for publication' \
+    "$repo_root/.github/workflows/release.yml" | grep -Fq 'persist-credentials: false'
 grep -Fq -- '--no-autoremove nasmount' "$repo_root/packaging/nasmount-uninstall.sh"
 for workflow in "$repo_root/.github/workflows/ci.yml" "$repo_root/.github/workflows/release.yml"; do
     [ "$(grep -Fc 'dnf remove -y --no-autoremove nasmount' "$workflow")" -eq 2 ]
