@@ -1,0 +1,2 @@
+# Enable nasmount's root boot coordinator on native Fedora installations.
+enable nasmount-boot.service

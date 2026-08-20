@@ -28,9 +28,12 @@ int main(int argc, char **argv)
     parser.setApplicationDescription(QStringLiteral("Authenticated nasmount uninstall cleanup"));
     parser.addHelpOption();
     parser.addVersionOption();
-    QCommandLineOption manifestOption(QStringLiteral("manifest"), QStringLiteral("CMake install manifest"),
+    QCommandLineOption manifestOption(QStringLiteral("manifest"), QStringLiteral("validated install manifest"),
                                       QStringLiteral("path"));
     parser.addOption(manifestOption);
+    QCommandLineOption validateOnlyOption(QStringLiteral("validate-only"),
+                                          QStringLiteral("validate the manifest without requesting cleanup"));
+    parser.addOption(validateOnlyOption);
     parser.process(app);
 
     QTextStream err(stderr);
@@ -44,6 +47,10 @@ int main(int argc, char **argv)
     if (!Session::validateInstallManifest(parser.value(manifestOption), &targets, &error)) {
         err << "ERROR: " << error << '\n';
         return 1;
+    }
+    if (parser.isSet(validateOnlyOption)) {
+        QTextStream(stdout) << "validated " << targets.size() << " installed paths\n";
+        return 0;
     }
 
     auto lock = Session::UserLock::acquire(&error);

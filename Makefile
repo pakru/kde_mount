@@ -18,6 +18,7 @@ configure:
 	cmake -S . -B $(BUILD_DIR) \
 	      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 	      -DCMAKE_INSTALL_PREFIX=$(PREFIX) \
+	      -DNASMOUNT_PACKAGE_FAMILY=source \
 	      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 build: configure

@@ -1,0 +1,43 @@
+Source: nasmount
+Section: utils
+Priority: optional
+Maintainer: Pavel Krupets <pakru@users.noreply.github.com>
+Build-Depends:
+ appstream,
+ debhelper-compat (= 13),
+ cmake (>= 3.20),
+ extra-cmake-modules (>= 6.0),
+ g++,
+ libkf6auth-dev (>= 6.0),
+ libkf6config-dev (>= 6.0),
+ libkf6coreaddons-dev (>= 6.0),
+ libkf6i18n-dev (>= 6.0),
+ libkf6kcmutils-dev (>= 6.0),
+ libkf6widgetsaddons-dev (>= 6.0),
+ qt6-base-dev (>= 6.5),
+ qt6-declarative-dev (>= 6.5),
+ systemd
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/pakru/kde_mount
+
+Package: nasmount
+Architecture: amd64
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ cifs-utils,
+ polkitd,
+ qml6-module-org-kde-kcmutils,
+ qml6-module-qtquick,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-dialogs,
+ qml6-module-qtquick-layouts,
+ sudo,
+ systemd
+Recommends: dolphin, plasma-systemsettings
+Description: KDE Plasma CIFS mounts backed by static systemd units
+ nasmount adds and removes persistent CIFS shares through a KAuth helper.
+ Shares use root-owned systemd mount and automatic-mount unit pairs. They are
+ armed at boot and exposed through a System Settings KCM and a Dolphin
+ service-menu dialog.

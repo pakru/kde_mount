@@ -35,6 +35,7 @@ echo "Configuring..."
 cmake -S "$SRC" -B "$BUILD" \
       -DCMAKE_BUILD_TYPE=RelWithDebInfo \
       -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+      -DNASMOUNT_PACKAGE_FAMILY=source \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
 
 echo "Building..."
@@ -43,7 +44,7 @@ cmake --build "$BUILD" -j"$(nproc)"
 echo "Running tests..."
 for t in unitspec_test unitvalue_test verify_test helperinvoke_test store_test \
          mountactions_test mountmodel_test durablefs_test inventory_test operations_test \
-         arming_test credentialstore_test cleanupvalidation_test smburl_test; do
+         arming_test credentialstore_test cleanupvalidation_test packagestate_test smburl_test; do
     "$BUILD/bin/$t" || {
         echo "ERROR: $t failed — refusing to install." >&2
         exit 1
@@ -51,6 +52,8 @@ for t in unitspec_test unitvalue_test verify_test helperinvoke_test store_test \
 done
 bash "$SRC/tests/removed_api_gates.sh"
 bash "$SRC/tests/qml_invokable_gate.sh"
+bash "$SRC/tests/package_scripts_test.sh"
+bash "$SRC/tests/packaging_metadata_test.sh"
 ctest --test-dir "$BUILD" -R '^(appstreamtest|version_metadata)$' \
       --output-on-failure --no-tests=error
 

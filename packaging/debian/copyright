@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: nasmount
+Source: https://github.com/pakru/kde_mount
+
+Files: *
+Copyright: 2025-2026 Pavel Krupets and contributors
+License: GPL-3.0-or-later
+ See /usr/share/common-licenses/GPL-3 on Debian systems for the complete text.

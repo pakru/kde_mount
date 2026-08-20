@@ -1,0 +1,106 @@
+Name:           nasmount
+Version:        @VERSION@
+Release:        @RELEASE@%{?dist}
+Summary:        KDE Plasma CIFS mounts backed by static systemd units
+
+# The cleanup manifest intentionally describes one independent regular file
+# per installed path, and Dolphin requires its trusted service menu to retain
+# the executable bit. Keep Fedora post-processors from changing either fact.
+%undefine __brp_linkdupes
+%undefine __brp_mangle_shebangs
+
+License:        GPL-3.0-or-later
+URL:            https://github.com/pakru/kde_mount
+ExclusiveArch:  x86_64
+Source0:        %{name}-%{version}.tar.gz
+
+BuildRequires:  appstream
+BuildRequires:  cmake >= 3.20
+BuildRequires:  extra-cmake-modules >= 6.0
+BuildRequires:  gcc-c++
+BuildRequires:  kf6-kauth-devel >= 6.0
+BuildRequires:  kf6-kconfig-devel >= 6.0
+BuildRequires:  kf6-kcoreaddons-devel >= 6.0
+BuildRequires:  kf6-ki18n-devel >= 6.0
+BuildRequires:  kf6-kcmutils-devel >= 6.0
+BuildRequires:  kf6-kwidgetsaddons-devel >= 6.0
+BuildRequires:  qt6-qtbase-devel >= 6.5
+BuildRequires:  qt6-qtdeclarative-devel >= 6.5
+BuildRequires:  systemd
+BuildRequires:  systemd-rpm-macros
+
+Requires:       cifs-utils
+Requires:       kf6-kcmutils
+Requires:       polkit
+Requires:       qt6-qtdeclarative
+Requires:       sudo
+Requires:       systemd
+Recommends:     dolphin
+Recommends:     plasma-systemsettings
+
+%description
+nasmount adds and removes persistent CIFS shares through a KAuth helper.
+Shares use root-owned systemd mount and automatic-mount unit pairs. They are
+armed at boot and exposed through a System Settings KCM and a Dolphin
+service-menu dialog.
+
+%prep
+%autosetup
+
+%build
+%cmake \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
+    -DNASMOUNT_PACKAGE_FAMILY=rpm
+%cmake_build
+
+%check
+%ctest
+
+%install
+%cmake_install
+
+%pre
+if [ "$1" -gt 1 ]; then
+    echo "nasmount does not yet support in-place package upgrades." >&2
+    echo "Run nasmount-uninstall, then install the new package." >&2
+    exit 1
+fi
+
+%post
+%systemd_post nasmount-boot.service
+if [ "$1" -eq 1 ] && [ -d /run/systemd/system ]; then
+    systemctl start nasmount-boot.service >/dev/null 2>&1 || :
+fi
+
+%preun
+if [ "$1" -eq 0 ]; then
+    %{_libdir}/libexec/nasmount-package-guard || exit $?
+fi
+%systemd_preun nasmount-boot.service
+
+%postun
+%systemd_postun_with_restart nasmount-boot.service
+
+%files
+%license %{_licensedir}/nasmount/LICENSE
+%{_bindir}/nasmount-cleanup
+%{_bindir}/nasmount-dialog
+%{_bindir}/nasmount-uninstall
+%{_libexecdir}/kf6/kauth/nasmount-helper
+%{_libdir}/libexec/nasmount-boot
+%{_libdir}/libexec/nasmount-package-guard
+%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_nasmount.so
+%{_unitdir}/nasmount-boot.service
+%{_presetdir}/90-nasmount.preset
+%{_datadir}/applications/kcm_nasmount.desktop
+%{_datadir}/dbus-1/system-services/io.github.pakru.nasmount.service
+%{_datadir}/dbus-1/system.d/io.github.pakru.nasmount.conf
+%{_datadir}/kio/servicemenus/nasmount.desktop
+%{_datadir}/nasmount/cleanup-manifest.txt
+%{_datadir}/nasmount/package-family
+%{_datadir}/polkit-1/actions/io.github.pakru.nasmount.policy
+
+%changelog
+* Sun Aug 16 2026 Pavel Krupets <pakru@users.noreply.github.com> - @VERSION@-@RELEASE@
+- Initial Fedora 44 package

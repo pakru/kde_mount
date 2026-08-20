@@ -23,21 +23,52 @@ Network Mounts** to list, add and remove shares with live state for each, or
 the **Dolphin service menu** (right-click an `smb://` share → **Mount as
 Network Drive…**). Both render the same `ShareForm.qml`.
 
-## Requirements
+## Supported downloads
 
-A **Plasma 6 / KF6** desktop and **Linux 6.8+** (for `STATX_MNT_ID_UNIQUE`).
+Download the latest package for your system with one command.
+
+Ubuntu/Kubuntu 26.04 LTS amd64:
+
+```bash
+wget https://github.com/pakru/kde_mount/releases/latest/download/nasmount-amd64-0.1.0.deb
+```
+
+Fedora KDE 44 x86_64:
+
+```bash
+wget https://github.com/pakru/kde_mount/releases/latest/download/nasmount-fedora44-x86_64-0.1.0.rpm
+```
+
+Then install the downloaded package:
+
+```bash
+sudo apt install ./nasmount-amd64-0.1.0.deb                       # Ubuntu/Kubuntu
+sudo dnf install ./nasmount-fedora44-x86_64-0.1.0.rpm             # Fedora
+```
+
+The Release notes contain the exact one-line commands for their version.
+Optional checksums are published as `nasmount-<version>-SHA256SUMS`.
+
+The package manager installs the required runtime dependencies. A compiler,
+CMake, Qt/KF development packages, and a source checkout are not required.
+Packages are clean-install only: uninstall an existing nasmount installation
+before installing a different version.
+
+
+## Source-build requirements
+
+A **Plasma 6+ / KF6+** desktop and **Linux 6.8+** (for `STATX_MNT_ID_UNIQUE`).
 
 | Need | Debian/Ubuntu package |
 |------|-----------------------|
 | CMake ≥ 3.20, C++20 compiler | `cmake`, `g++` |
 | Qt 6 Core / Widgets / Concurrent / Quick / QuickControls2 | `qt6-base-dev`, `qt6-declarative-dev` |
 | Extra CMake Modules | `extra-cmake-modules` |
-| KF6 Auth / I18n / WidgetsAddons / Config / Wallet / CoreAddons / KCMUtils | `libkf6auth-dev`, `libkf6i18n-dev`, `libkf6widgetsaddons-dev`, `libkf6config-dev`, `libkf6wallet-dev`, `libkf6coreaddons-dev`, `kf6-kcmutils-dev` |
+| KF6 Auth / I18n / WidgetsAddons / Config / CoreAddons / KCMUtils | `libkf6auth-dev`, `libkf6i18n-dev`, `libkf6widgetsaddons-dev`, `libkf6config-dev`, `libkf6coreaddons-dev`, `kf6-kcmutils-dev` |
 | `mount.cifs` at runtime | `cifs-utils` |
 
-`install.sh` stops before building if any of these is missing.
 
-## Build and install
+## Build and install from source
 
 ```bash
 make install           # or: ./install.sh — same thing
@@ -65,11 +96,25 @@ uses `MAJOR.MINOR.PATCH` format. CMake reads it as `PROJECT_VERSION`; the
 command-line programs' `--version` output and the KCM plugin metadata are
 generated from that value. A release bump therefore changes only `VERSION`.
 
-Future GitHub release automation can read the file without evaluating build
-scripts and use `nasmount-<version>-<platform>` for artifact names. Release
-tags should use the matching `v<version>` form (for example, version `0.3.0`
-uses tag `v0.3.0`). The workflow should reject a tag whose value does not match
-`VERSION` before publishing artifacts.
+Release tags use the matching `v<version>` form (for example, version `0.3.0`
+uses tag `v0.3.0`). The release workflow rejects a tag whose value does not
+match `VERSION`, rebuilds both native packages from that tag, smoke-installs
+and removes them on their target distributions, verifies the two-package set,
+generates checksums and a JSON release manifest, attests both packages, and
+creates a draft GitHub Release.
+
+The regular CI workflow has these required jobs:
+
+1. `validate_packaging` — rootless source, shell, workflow, and package-metadata gates;
+2. `build_deb` — unprivileged Ubuntu 26.04 build, all CTests, Lintian, and payload evidence;
+3. `build_rpm` — unprivileged Fedora 44 build, all CTests, rpmlint, and payload evidence;
+4. `smoke_packages` — clean-container install, package guard, and removal for both targets;
+5. `verify_artifact_set` — exact payload/layout checks plus checksums and release metadata;
+6. `ci_success` — one branch-protection result requiring every prior job.
+
+Package creation deliberately uses `dpkg-buildpackage`/debhelper and
+`rpmbuild`/Fedora RPM macros. The repository `make install` target is only for
+interactive source installation and is never invoked to assemble a package.
 
 Adding or removing a share requires **administrator authentication**
 (`auth_admin`): it writes a persistent root-owned credential under `/etc` and a
@@ -83,21 +128,36 @@ never while using a mounted share. Listing state is read-only and unauthenticate
 make test              # or: ctest --test-dir build --output-on-failure
 ```
 
-Fourteen test binaries plus four source, metadata, and AppStream gates;
-`install.sh` runs every one and refuses to install if any fail. Privileged
-accept paths and real reboot / no-login behaviour must be validated in a
-disposable VM.
+Fifteen test binaries plus shell, metadata, and AppStream gates; `install.sh`
+runs every one and refuses to install if any fail. Both native-package builds
+run the complete 21-test CTest suite. Privileged accept paths and real reboot /
+no-login behaviour must still be validated in disposable target VMs.
 
 ## Uninstall
 
+For a native package, run this as the desktop user who owns the shares:
+
 ```bash
-./uninstall.sh
+nasmount-uninstall
 ```
 
 An authenticated full purge: every managed share, its credentials and runtime
 records, `~/.config/nasmountrc`, then the software itself. Mount points are retained; tampered state or an unsafe live mount is
 refused, leaving everything installed for retry.
 
+The command remains installed after the download is deleted. It authenticates
+and purges managed state while the KAuth helper and polkit policy still exist,
+then invokes `apt-get remove` or `dnf remove` through `sudo`. Direct package-
+manager removal is allowed only when the read-only package guard proves that
+no nasmount-managed units, credentials, or runtime state remain; otherwise it
+stops and tells you to use `nasmount-uninstall`.
+
+For an installation made from source, use:
+
+```bash
+./uninstall.sh
+```
+
 It reads `build/install_manifest.txt` and refuses to run without it, so
-**uninstall works only from the build tree that installed** — after `make clean`,
-or in a fresh checkout, re-run `./install.sh` first.
+**source uninstall works only from the build tree that installed** — after
+`make clean`, or in a fresh checkout, re-run `./install.sh` first.

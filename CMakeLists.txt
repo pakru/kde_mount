@@ -14,6 +14,17 @@ endif()
 
 project(nasmount VERSION "${NASMOUNT_VERSION}" LANGUAGES CXX)
 
+# `source` preserves the checkout-driven install/uninstall lifecycle. Native
+# packages select their family explicitly so the installed uninstaller never
+# guesses which package manager owns the payload.
+set(NASMOUNT_PACKAGE_FAMILY "source" CACHE STRING "Installation owner: source, deb, or rpm")
+set_property(CACHE NASMOUNT_PACKAGE_FAMILY PROPERTY STRINGS source deb rpm)
+if(NOT NASMOUNT_PACKAGE_FAMILY MATCHES "^(source|deb|rpm)$")
+    message(FATAL_ERROR
+        "NASMOUNT_PACKAGE_FAMILY must be source, deb, or rpm; got "
+        "'${NASMOUNT_PACKAGE_FAMILY}'.")
+endif()
+
 # A normal `cmake --build` must notice a version bump even when the user does
 # not explicitly run the configure command first.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -52,6 +63,7 @@ configure_file(src/core/nasmountversion.h.in
 # dependency on a .so a non-root user could replace.
 # ---------------------------------------------------------------------------
 add_library(nasmount-core STATIC
+    src/core/packagestate.cpp
     src/core/unitspec.cpp
     src/core/unitvalue.cpp
     src/core/verify.cpp
@@ -163,6 +175,34 @@ add_executable(nasmount-cleanup src/cleanup/main.cpp)
 target_link_libraries(nasmount-cleanup PRIVATE nasmount-session Qt6::Core)
 install(TARGETS nasmount-cleanup DESTINATION ${KDE_INSTALL_BINDIR})
 
+# --- native-package removal guard and persistent uninstall entry point ------
+# The guard is intentionally linked only to read-only core code. Package
+# maintainer scripts run it before erasure; it cannot mutate or repair state.
+add_executable(nasmount-package-guard src/packageguard/main.cpp)
+target_link_libraries(nasmount-package-guard PRIVATE nasmount-core Qt6::Core)
+install(TARGETS nasmount-package-guard DESTINATION ${KDE_INSTALL_LIBEXECDIR})
+
+install(PROGRAMS packaging/nasmount-uninstall.sh
+        DESTINATION ${KDE_INSTALL_BINDIR}
+        RENAME nasmount-uninstall)
+
+configure_file(packaging/package-family.in
+               ${CMAKE_CURRENT_BINARY_DIR}/package-family
+               @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/package-family
+        DESTINATION ${KDE_INSTALL_DATADIR}/nasmount)
+if(NASMOUNT_PACKAGE_FAMILY STREQUAL "rpm")
+    set(NASMOUNT_LICENSE_INSTALL_DIR "${KDE_INSTALL_DATADIR}/licenses/nasmount")
+else()
+    set(NASMOUNT_LICENSE_INSTALL_DIR "${KDE_INSTALL_DATADIR}/doc/nasmount")
+endif()
+install(FILES LICENSE DESTINATION ${NASMOUNT_LICENSE_INSTALL_DIR})
+
+if(NASMOUNT_PACKAGE_FAMILY STREQUAL "rpm")
+    install(FILES packaging/rpm/90-nasmount.preset
+            DESTINATION ${KDE_INSTALL_SYSTEMDUNITDIR}/system-preset)
+endif()
+
 
 # --- KCM: System Settings module --------------------------------------------
 add_subdirectory(src/kcm)
@@ -179,6 +219,41 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/nasmount.desktop
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE
                     WORLD_READ WORLD_EXECUTE)
+
+# The authenticated cleanup client accepts only a complete, configure-time
+# manifest. Generate it from the same KDEInstallDirs values used above so
+# Debian multiarch and Fedora libexec/plugin layouts cannot drift apart.
+function(nasmount_full_install_path output directory)
+    if(IS_ABSOLUTE "${directory}")
+        set(${output} "${directory}" PARENT_SCOPE)
+    else()
+        set(${output} "${CMAKE_INSTALL_PREFIX}/${directory}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+nasmount_full_install_path(NASMOUNT_FULL_BINDIR "${KDE_INSTALL_BINDIR}")
+nasmount_full_install_path(NASMOUNT_FULL_LIBEXECDIR "${KDE_INSTALL_LIBEXECDIR}")
+nasmount_full_install_path(NASMOUNT_FULL_PLUGINDIR "${KDE_INSTALL_PLUGINDIR}")
+nasmount_full_install_path(NASMOUNT_FULL_SYSTEMDUNITDIR "${KDE_INSTALL_SYSTEMDUNITDIR}")
+nasmount_full_install_path(NASMOUNT_FULL_DATADIR "${KDE_INSTALL_DATADIR}")
+nasmount_full_install_path(NASMOUNT_FULL_KAUTH_HELPER_DIR "${KAUTH_HELPER_INSTALL_DIR}")
+
+if(NASMOUNT_PACKAGE_FAMILY STREQUAL "rpm")
+    set(NASMOUNT_LICENSE_MANIFEST_PATH "${NASMOUNT_FULL_DATADIR}/licenses/nasmount/LICENSE")
+else()
+    set(NASMOUNT_LICENSE_MANIFEST_PATH "${NASMOUNT_FULL_DATADIR}/doc/nasmount/LICENSE")
+endif()
+
+set(NASMOUNT_PRESET_MANIFEST_LINE "")
+if(NASMOUNT_PACKAGE_FAMILY STREQUAL "rpm")
+    set(NASMOUNT_PRESET_MANIFEST_LINE
+        "${NASMOUNT_FULL_SYSTEMDUNITDIR}/system-preset/90-nasmount.preset")
+endif()
+configure_file(packaging/cleanup-manifest.in
+               ${CMAKE_CURRENT_BINARY_DIR}/cleanup-manifest.txt
+               @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cleanup-manifest.txt
+        DESTINATION ${KDE_INSTALL_DATADIR}/nasmount)
 
 # --- linkage invariant: nasmount-root reaches only privileged executables ---
 # (plan §2.1.2). Structural placement (never adding it to these
@@ -197,6 +272,7 @@ endfunction()
 nasmount_assert_no_root_link(nasmount-session)
 nasmount_assert_no_root_link(nasmount-dialog)
 nasmount_assert_no_root_link(nasmount-cleanup)
+nasmount_assert_no_root_link(nasmount-package-guard)
 nasmount_assert_no_root_link(kcm_nasmount)
 
 # --- tests -------------------------------------------------------------------
@@ -264,6 +340,10 @@ add_executable(cleanupvalidation_test tests/cleanupvalidation_test.cpp)
 target_link_libraries(cleanupvalidation_test PRIVATE nasmount-session)
 add_test(NAME cleanupvalidation COMMAND cleanupvalidation_test)
 
+add_executable(packagestate_test tests/packagestate_test.cpp)
+target_link_libraries(packagestate_test PRIVATE nasmount-core)
+add_test(NAME packagestate COMMAND packagestate_test)
+
 # The QML/C++ boundary is invisible to the compiler, qmllint and every ctest
 # binary: QML resolves these names at runtime against a QObject exposed as
 # `var`. This gate is the only thing that catches a C++ rename leaving a QML
@@ -276,13 +356,26 @@ add_test(NAME removed_api_gates
 set_tests_properties(removed_api_gates PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Protect the release contract at the generated boundaries: VERSION, CMake's
-# project version, the C++ runtime version, and KDE plugin metadata must agree.
+add_test(NAME package_scripts
+         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_scripts_test.sh)
+set_tests_properties(package_scripts PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_test(NAME packaging_metadata
+         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/packaging_metadata_test.sh)
+set_tests_properties(packaging_metadata PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Protect the release contract at generated and executable boundaries: VERSION,
+# CMake's project version, product --version output, and KCM metadata agree.
 add_test(NAME version_metadata
     COMMAND ${CMAKE_COMMAND}
         -DVERSION_FILE=${NASMOUNT_VERSION_FILE}
         -DGENERATED_HEADER=${CMAKE_CURRENT_BINARY_DIR}/generated/nasmountversion.h
         -DKCM_METADATA=${CMAKE_CURRENT_BINARY_DIR}/src/kcm/kcm_nasmount_plugin.json
+        -DBOOT_EXECUTABLE=$<TARGET_FILE:nasmount-boot>
+        -DCLEANUP_EXECUTABLE=$<TARGET_FILE:nasmount-cleanup>
+        -DGUARD_EXECUTABLE=$<TARGET_FILE:nasmount-package-guard>
         -DEXPECTED_VERSION=${PROJECT_VERSION}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/version_metadata_test.cmake
 )

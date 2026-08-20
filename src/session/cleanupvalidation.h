@@ -10,8 +10,8 @@
 namespace Session
 {
 
-/** Validates CMake's user-writable install manifest against the finite set
- * of paths this project installs. Returns the exact paths to remove. */
+/** Validates a CMake or package-owned cleanup manifest against the finite,
+ * complete set of paths this project installs. Returns the exact paths. */
 bool validateInstallManifest(const QString &manifestPath, QStringList *targets, QString *error);
 
 } // namespace Session

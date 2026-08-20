@@ -5,6 +5,8 @@
 #include "runtimefiles.h"
 #include "durablefs.h"
 
+#include <unistd.h>
+
 namespace Root::RuntimeFiles
 {
 

@@ -1,0 +1,17 @@
+@NASMOUNT_FULL_KAUTH_HELPER_DIR@/nasmount-helper
+@CMAKE_INSTALL_PREFIX@/share/dbus-1/system.d/io.github.pakru.nasmount.conf
+@CMAKE_INSTALL_PREFIX@/share/dbus-1/system-services/io.github.pakru.nasmount.service
+@CMAKE_INSTALL_PREFIX@/share/polkit-1/actions/io.github.pakru.nasmount.policy
+@NASMOUNT_FULL_LIBEXECDIR@/nasmount-boot
+@NASMOUNT_FULL_SYSTEMDUNITDIR@/system/nasmount-boot.service
+@NASMOUNT_FULL_BINDIR@/nasmount-dialog
+@NASMOUNT_FULL_BINDIR@/nasmount-cleanup
+@NASMOUNT_FULL_BINDIR@/nasmount-uninstall
+@NASMOUNT_FULL_LIBEXECDIR@/nasmount-package-guard
+@NASMOUNT_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_nasmount.so
+@NASMOUNT_FULL_DATADIR@/applications/kcm_nasmount.desktop
+@NASMOUNT_FULL_DATADIR@/kio/servicemenus/nasmount.desktop
+@NASMOUNT_FULL_DATADIR@/nasmount/cleanup-manifest.txt
+@NASMOUNT_FULL_DATADIR@/nasmount/package-family
+@NASMOUNT_LICENSE_MANIFEST_PATH@
+@NASMOUNT_PRESET_MANIFEST_LINE@

@@ -30,8 +30,8 @@ make clean            # rm -rf build/
   `/usr/share/dbus-1/system-services` and polkit only
   `/usr/share/polkit-1/actions`. A `/usr/local` install builds and then
   silently fails to authenticate.
-- Installing is disruptive (writes system D-Bus/polkit files, enables two
-  systemd services). Don't install unless asked.
+- Installing is disruptive (writes system D-Bus/polkit files and enables the
+  boot service). Don't install unless asked.
 - `uninstall.sh` reads `build/install_manifest.txt` and refuses to run without
   it, so **uninstall only works from the build tree that installed** — a clean
   checkout, or one where `make clean` has run, cannot uninstall until
@@ -41,6 +41,50 @@ make clean            # rm -rf build/
   requires it to be complete), so regenerating it is safe.
 - The repo has **no commits** yet. `build/` is the only build directory the
   tooling knows about; `.gitignore` also covers `build-*/` for ad-hoc trees.
+
+## Native packages and release CI
+
+The supported binary targets are Ubuntu/Kubuntu 26.04 amd64 (`.deb`) and
+Fedora KDE 44 x86_64 (`.rpm`). KDE neon and a generic DEB/RPM compatibility
+claim are explicitly out of scope. Build packages only inside their matching
+target containers:
+
+```bash
+./packaging/build-deb.sh EMPTY_OUTPUT_DIR   # Ubuntu 26.04, non-root
+./packaging/build-rpm.sh EMPTY_OUTPUT_DIR   # Fedora 44, non-root
+./packaging/verify-artifact-set.sh PACKAGE_DIR EMPTY_METADATA_DIR
+```
+
+The package entry points use `dpkg-buildpackage`/debhelper and `rpmbuild`/RPM
+macros, which call CMake directly with `NASMOUNT_PACKAGE_FAMILY=deb|rpm`.
+**Never use `make install` to build a package**: it calls the interactive,
+privileged source installer and mutates the running system.
+
+The regular workflow has exactly `validate_packaging`, `build_deb`,
+`build_rpm`, `smoke_packages`, `verify_artifact_set`, and `ci_success`. The
+release workflow independently rebuilds the tag through `validate_release`,
+`build_deb_release`, `build_rpm_release`, `smoke_release_packages`,
+`verify_release_set`, and `attest_and_publish`; only its last job can publish.
+The publication job renames the verified native build outputs to the
+still-versioned user-facing assets `nasmount-amd64-<version>.deb` and
+`nasmount-fedora44-x86_64-<version>.rpm`. README and generated Release-note
+one-line download commands depend on those exact names.
+
+Native removal has a strict order. `nasmount-uninstall` runs authenticated
+owner-scoped cleanup while KAuth/polkit are installed, then invokes apt/dnf.
+The package `prerm`/`%preun` calls the read-only
+`nasmount-package-guard` first and refuses direct removal unless root state is
+provably empty. The guard links `nasmount-core` only; never give it mutation or
+`nasmount-root` access, and never launch KAuth from a package-manager script.
+
+Changing the installed file set requires synchronized updates to CMake, the
+generated cleanup manifest, `Session::validateInstallManifest()`, source
+`uninstall.sh`, DEB/RPM file metadata, and cleanup/package inspection tests.
+Debian's KAuth helper directory, Debian multiarch libexec, and Fedora
+`lib64/libexec` layouts are intentionally distinct.
+Before publishing a draft, run the privileged release checklist on fresh
+Kubuntu 26.04 and Fedora KDE 44 VMs; GitHub container smoke tests do not replace
+KAuth, polkit, D-Bus, CIFS, service enablement, and reboot checks.
 
 ## Architecture and the linkage invariant
 
@@ -106,8 +150,8 @@ which is how the two drifted apart before.
   validated unit marker via `Verify::inspectDefinition()` — never from the
   Store and never from a caller-supplied flag.
 - Every client mutation runs on a worker thread under `Session::UserLock`; every
-  privileged mutation runs under `Root::RootLock`. KAuth and KWallet calls are
-  unbounded waits and must never touch the GUI thread.
+  privileged mutation runs under `Root::RootLock`. KAuth calls are unbounded
+  waits and must never touch the GUI thread.
 
 ## Tests
 

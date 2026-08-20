@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove)
+        /usr/lib/@DEB_HOST_MULTIARCH@/libexec/nasmount-package-guard
+        ;;
+esac
+
+# The guard must run before debhelper's generated service-stop snippet.
+#DEBHELPER#
+exit 0

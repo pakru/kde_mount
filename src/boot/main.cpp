@@ -15,12 +15,14 @@
  */
 
 #include "arming.h"
+#include "nasmountversion.h"
 #include "rootlock.h"
 #include "unitspec.h"
 #include "unitvalue.h"
 #include "verify.h"
 
 #include <QCoreApplication>
+#include <QCommandLineParser>
 #include <QTextStream>
 
 #include <pwd.h>
@@ -102,6 +104,14 @@ void armOneShare(const Verify::OwnedUnit &unit)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("nasmount-boot"));
+    QCoreApplication::setApplicationVersion(QString::fromLatin1(Nasmount::Version));
+
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("Arm nasmount shares at boot"));
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.process(app);
 
     QString lockError;
     auto lock = Root::RootLock::acquire(&lockError);

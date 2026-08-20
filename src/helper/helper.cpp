@@ -36,6 +36,7 @@
 #include <QVariantMap>
 
 #include <pwd.h>
+#include <unistd.h>
 
 using namespace KAuth;
 
