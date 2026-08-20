@@ -28,7 +28,7 @@ jobs:
       commit: ${{ steps.contract.outputs.commit }}
     steps:
       - name: Check out exact tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
@@ -61,7 +61,7 @@ jobs:
       image: ubuntu:26.04@sha256:7b202b0e2e0028c6250f5fcf41d04df492d145a1654c6995a6553f0c1f6f1960
     steps:
       - name: Check out validated tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate_release.outputs.tag }}
           fetch-depth: 0
@@ -109,7 +109,7 @@ jobs:
             kf6-kwidgetsaddons-devel qt6-qtbase-devel qt6-qtdeclarative-devel \
             rpm-build rpmlint systemd systemd-rpm-macros tar
       - name: Check out validated tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate_release.outputs.tag }}
           fetch-depth: 0
@@ -163,7 +163,7 @@ jobs:
               binutils diffutils file sudo
           fi
       - name: Check out validated inspection scripts
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate_release.outputs.tag }}
       - name: Download matching package
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out validated tag
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate_release.outputs.tag }}
       - name: Install cross-package inspection tools
@@ -281,7 +281,7 @@ jobs:
       attestations: write
     steps:
       - name: Check out validated tag for publication
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate_release.outputs.tag }}
           fetch-depth: 0
