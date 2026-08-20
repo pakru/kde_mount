@@ -36,6 +36,11 @@ package metadata and validation before being advertised as supported.
 `VERSION` remains the sole upstream software version. Add
 `packaging/RELEASE`, containing a positive integer initially set to `1`, for a
 packaging-only revision that does not change the application version.
+Add `packaging/tag-release.sh` so maintainers enter an application version only
+in `VERSION`. The helper validates a clean `master` at the published
+`origin/master` tip, rejects an existing matching local or remote tag, and
+creates the local annotated `v<version>` tag. It prints but never executes the
+tag push, leaving one explicit review point before the release workflow starts.
 
 For `VERSION=0.1.0` and `packaging/RELEASE=1`, the release contains:
 
@@ -545,10 +550,13 @@ Implement `validate_packaging`, `build_deb`, `build_rpm`, `smoke_packages`,
 Files:
 
 - `.github/workflows/release.yml` (new)
+- `packaging/tag-release.sh` (new)
 - release-set tests/gates
 
 Implement `validate_release`, `build_deb_release`, `build_rpm_release`,
 `smoke_release_packages`, `verify_release_set`, and `attest_and_publish`.
+Add rootless functional tests for dirty-state refusal, annotated tag creation,
+local/remote duplicate refusal, and the no-implicit-push contract.
 
 ### Phase 6 — qualify and document the first packages
 

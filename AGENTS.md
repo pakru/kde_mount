@@ -70,6 +70,15 @@ still-versioned user-facing assets `nasmount-amd64-<version>.deb` and
 `nasmount-fedora44-x86_64-<version>.rpm`. README and generated Release-note
 one-line download commands depend on those exact names.
 
+`VERSION` is the sole place where a maintainer enters an application version.
+After committing the version bump, pushing `master`, and obtaining a successful
+regular CI run, use `./packaging/tag-release.sh` (or `--sign` with a configured
+Git signing key). The helper verifies that the tree is clean and HEAD equals
+`origin/master`, rejects existing local/remote tags, and creates the matching
+local annotated `v<version>` tag. It intentionally does not push; review the
+tag and run the exact push command it prints. Never move or reuse a release
+tag.
+
 Native removal has a strict order. `nasmount-uninstall` runs authenticated
 owner-scoped cleanup while KAuth/polkit are installed, then invokes apt/dnf.
 The package `prerm`/`%preun` calls the read-only

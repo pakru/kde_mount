@@ -42,8 +42,8 @@ wget https://github.com/pakru/kde_mount/releases/latest/download/nasmount-fedora
 Then install the downloaded package:
 
 ```bash
-sudo apt install ./nasmount-amd64-0.1.0.deb                       # Ubuntu/Kubuntu
-sudo dnf install ./nasmount-fedora44-x86_64-0.1.0.rpm             # Fedora
+sudo apt install ./nasmount-amd64-0.1.0.deb                       # Kubuntu or other deb-based distro
+sudo dnf install ./nasmount-fedora44-x86_64-0.1.0.rpm             # Fedora or other rpm-based distro
 ```
 
 The Release notes contain the exact one-line commands for their version.
@@ -102,6 +102,20 @@ match `VERSION`, rebuilds both native packages from that tag, smoke-installs
 and removes them on their target distributions, verifies the two-package set,
 generates checksums and a JSON release manifest, attests both packages, and
 creates a draft GitHub Release.
+
+For a release, change `VERSION`, commit it, push, and wait for regular
+CI to pass. Then create the matching tag without entering the version again:
+
+```bash
+./packaging/tag-release.sh          # or add --sign when Git tag signing is configured
+```
+
+The helper requires a clean `master` whose current commit is already the
+`origin/master` tip, validates `VERSION` and `packaging/RELEASE`, and refuses
+an existing local or remote tag. It creates an annotated tag locally and
+prints the exact `git push origin refs/tags/v<version>` command; it never pushes
+on its own. Review the tag, run the printed command, and the tag push triggers
+the release workflow.
 
 The regular CI workflow has these required jobs:
 
