@@ -23,6 +23,18 @@ package_manager_binary()
     esac
 }
 
+package_manager_remove_arguments()
+{
+    case "$1" in
+        deb) printf '%s\n' remove nasmount ;;
+        # DNF may continue auto-removing dependencies after an RPM %preun
+        # guard refuses the transaction. Keeping dependencies makes the
+        # supported uninstall path atomic with respect to installed packages.
+        rpm) printf '%s\n' remove --no-autoremove nasmount ;;
+        *) return 1 ;;
+    esac
+}
+
 validate_root_file()
 {
     local path=$1
@@ -72,10 +84,17 @@ remove_native_package()
 {
     local family=$1
     local manager
+    local argument_lines
+    local -a arguments
     manager=$(package_manager_binary "$family") || {
         echo "ERROR: no native package manager for '$family'." >&2
         return 1
     }
+    argument_lines=$(package_manager_remove_arguments "$family") || {
+        echo "ERROR: no native package removal arguments for '$family'." >&2
+        return 1
+    }
+    mapfile -t arguments <<< "$argument_lines"
     [ -x /usr/bin/sudo ] || {
         echo "ERROR: /usr/bin/sudo is required to remove the package." >&2
         return 1
@@ -85,10 +104,7 @@ remove_native_package()
         return 1
     }
 
-    case "$family" in
-        deb) /usr/bin/sudo -- "$manager" remove nasmount ;;
-        rpm) /usr/bin/sudo -- "$manager" remove nasmount ;;
-    esac
+    /usr/bin/sudo -- "$manager" "${arguments[@]}"
 }
 
 main()

@@ -160,7 +160,7 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends binutils file sudo
           else
             dnf install -y --allowerasing --setopt=install_weak_deps=False \
-              binutils file sudo
+              binutils diffutils file sudo
           fi
       - name: Check out validated inspection scripts
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -196,14 +196,28 @@ jobs:
             rpm -ql nasmount > logs/owned-paths.txt
             bash packaging/smoke-installed-package.sh rpm '${{ needs.validate_release.outputs.version }}' \
               | tee logs/inspection.txt
+            rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort \
+              > logs/rpm-packages-before-blocked-removal.txt
             install -d -m 0700 /etc/nasmount
-            if dnf remove -y nasmount; then
+            if dnf remove -y --no-autoremove nasmount; then
               echo 'ERROR: RPM removal ignored managed state' >&2
               exit 1
             fi
             rpm -q nasmount >/dev/null
+            rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort \
+              > logs/rpm-packages-after-blocked-removal.txt
+            cmp logs/rpm-packages-before-blocked-removal.txt \
+              logs/rpm-packages-after-blocked-removal.txt
+            if ldd /usr/lib64/libexec/nasmount-package-guard | grep -q 'not found'; then
+              echo 'ERROR: blocked RPM removal left the package guard unresolved' >&2
+              exit 1
+            fi
+            if /usr/lib64/libexec/nasmount-package-guard; then
+              echo 'ERROR: package guard accepted managed state after blocked removal' >&2
+              exit 1
+            fi
             rmdir /etc/nasmount
-            dnf remove -y nasmount
+            dnf remove -y --no-autoremove nasmount
             ! rpm -q nasmount >/dev/null 2>&1
           fi
           printf '%s release smoke passed\n' '${{ matrix.target }}' > logs/result.txt

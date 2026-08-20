@@ -81,9 +81,11 @@ nasmount-uninstall
 
 It performs the existing owner-scoped authenticated cleanup first, then asks
 the native package manager to remove `nasmount`. Direct `apt remove nasmount`
-or `dnf remove nasmount` is allowed only when no managed nasmount system state
-exists. Package removal must fail closed rather than orphan units, credentials,
-or runtime records.
+or `dnf remove --no-autoremove nasmount` is allowed only when no managed
+nasmount system state exists. Plain Fedora `dnf remove nasmount` is unsupported:
+DNF may continue auto-removing unused dependencies after a failed RPM `%preun`.
+Package removal must fail closed rather than orphan units, credentials, runtime
+records, or an installed application whose runtime dependencies were removed.
 
 ## 3. Package and security boundaries
 
@@ -235,7 +237,7 @@ The installed uninstaller:
 4. stops if the KAuth result is failed or unknown;
 5. after confirmed purge and caller config removal, executes the matching
    package-manager removal command (`sudo apt remove nasmount` or
-   `sudo dnf remove nasmount`);
+   `sudo dnf remove --no-autoremove nasmount`);
 6. relies on the package pre-removal guard to independently confirm that no
    managed root state remains;
 7. refreshes the caller's KDE cache after successful package removal when the
@@ -247,7 +249,8 @@ single user cannot use package uninstall to delete another user's shares.
 
 If authenticated purge succeeds but native package removal fails, the safe
 result is an installed but empty application. The user can retry `apt remove`
-or `dnf remove`; do not attempt rollback by recreating deleted shares.
+or `dnf remove --no-autoremove`; do not attempt rollback by recreating deleted
+shares.
 
 Direct native package removal when the guard reports empty state removes only
 package files. It does not traverse home directories to delete arbitrary users'
@@ -451,8 +454,9 @@ For every VM:
 7. Confirm System Settings and Dolphin discover the installed integration.
 8. Add a disposable SMB share, exercise automount/idle release, reboot without
    login, and verify boot arming.
-9. With a managed share present, confirm direct `apt remove`/`dnf remove`
-   refuses before deleting package files.
+9. With a managed share present, confirm direct `apt remove` or
+   `dnf remove --no-autoremove` refuses without changing the complete installed
+   package set or leaving unresolved guard libraries.
 10. Run `nasmount-uninstall`; confirm authenticated purge precedes native
     package removal and mount-point directories remain.
 11. Confirm direct package removal succeeds when managed state is empty.

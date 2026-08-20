@@ -76,6 +76,10 @@ The package `prerm`/`%preun` calls the read-only
 `nasmount-package-guard` first and refuses direct removal unless root state is
 provably empty. The guard links `nasmount-core` only; never give it mutation or
 `nasmount-root` access, and never launch KAuth from a package-manager script.
+Every Fedora removal path must pass `--no-autoremove`: DNF can continue
+removing unused dependencies after a failed RPM `%preun`, leaving nasmount
+installed without Qt. The Fedora smoke gate snapshots the complete RPM set
+around a refused removal to enforce this rule.
 
 Changing the installed file set requires synchronized updates to CMake, the
 generated cleanup manifest, `Session::validateInstallManifest()`, source

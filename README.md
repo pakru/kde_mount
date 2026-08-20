@@ -147,10 +147,13 @@ refused, leaving everything installed for retry.
 
 The command remains installed after the download is deleted. It authenticates
 and purges managed state while the KAuth helper and polkit policy still exist,
-then invokes `apt-get remove` or `dnf remove` through `sudo`. Direct package-
-manager removal is allowed only when the read-only package guard proves that
-no nasmount-managed units, credentials, or runtime state remain; otherwise it
-stops and tells you to use `nasmount-uninstall`.
+then invokes `apt-get remove` or `dnf remove --no-autoremove` through `sudo`.
+Direct package-manager removal is allowed only when the read-only package guard
+proves that no nasmount-managed units, credentials, or runtime state remain;
+otherwise it stops and tells you to use `nasmount-uninstall`. On Fedora, never
+use plain `dnf remove nasmount`: DNF may continue auto-removing dependencies
+after an RPM pre-removal guard refuses. Use `nasmount-uninstall`, or
+`dnf remove --no-autoremove nasmount` only when the guard reports empty state.
 
 For an installation made from source, use:
 

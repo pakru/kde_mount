@@ -37,6 +37,16 @@ grep -Fq 'cp "packages/$NASMOUNT_DEB" "release/$NASMOUNT_DEB_RELEASE_ASSET"' \
     "$repo_root/.github/workflows/release.yml"
 grep -Fq 'cp "packages/$NASMOUNT_RPM" "release/$NASMOUNT_RPM_RELEASE_ASSET"' \
     "$repo_root/.github/workflows/release.yml"
+grep -Fq -- '--no-autoremove nasmount' "$repo_root/packaging/nasmount-uninstall.sh"
+for workflow in "$repo_root/.github/workflows/ci.yml" "$repo_root/.github/workflows/release.yml"; do
+    [ "$(grep -Fc 'dnf remove -y --no-autoremove nasmount' "$workflow")" -eq 2 ]
+    grep -Fq 'rpm-packages-before-blocked-removal.txt' "$workflow"
+    grep -Fq 'rpm-packages-after-blocked-removal.txt' "$workflow"
+    if grep -Fq 'dnf remove -y nasmount' "$workflow"; then
+        echo "ERROR: Fedora removal permits dependency autoremove in $workflow" >&2
+        exit 1
+    fi
+done
 
 if grep -R -n -E 'Fedora 43|fedora-43|fc43' "$repo_root/packaging"; then
     echo "ERROR: retired Fedora 43 target remains in packaging" >&2
